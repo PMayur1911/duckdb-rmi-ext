@@ -1,0 +1,23 @@
+# name: test/sql/learned_rmi.test
+# description: test learned_rmi extension
+# group: [sql]
+
+# Before we load the extension, this will fail
+statement error
+SELECT learned_rmi('Sam');
+----
+Catalog Error: Scalar Function with name learned_rmi does not exist!
+
+# Require statement will ensure this test is run with this extension loaded
+require learned_rmi
+
+# Confirm the extension works
+query I
+SELECT learned_rmi('Sam');
+----
+LearnedRmi Sam 🐥
+
+query I
+SELECT learned_rmi_openssl_version('Michael') ILIKE 'LearnedRmi Michael, my linked OpenSSL version is OpenSSL%';
+----
+true
