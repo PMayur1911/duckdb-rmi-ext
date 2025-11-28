@@ -11,7 +11,7 @@ public:
         auto &db = loader.GetDatabaseInstance();
 
         RegisterIndex(db);
-        // RegisterIndexScan(loader);
+        RegisterIndexScan(loader);
         RegisterIndexPragmas(loader);
         // RegisterMacros(loader);
         
@@ -27,7 +27,7 @@ private:
     static void RegisterIndex(DatabaseInstance &db);
 
     // Registers the RMI index scan table function
-    // static void RegisterIndexScan(ExtensionLoader &loader);
+    static void RegisterIndexScan(ExtensionLoader &loader);
 
     // Registers PRAGMA functions such as PRAGMA rmi_index_info();
     static void RegisterIndexPragmas(ExtensionLoader &loader);
