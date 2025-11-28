@@ -1,25 +1,16 @@
-#include "rmi_index.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "duckdb/optimizer/matcher/expression_matcher.hpp"
 
+#include "rmi_index.hpp"
 #include "rmi_linear_model.hpp"
 #include "rmi_module.hpp"
 
 namespace duckdb {
 
-struct RMIIndexScanState : public IndexScanState {
-    Value values[2];
-    ExpressionType expressions[2];
-    bool checked = false;
-    std::set<row_t> row_ids;
-};
-
-//==============================================================================
 // Helper: Extract numeric value from UnifiedVectorFormat and convert to double
-//==============================================================================
 static double ExtractDoubleValue(const UnifiedVectorFormat &fmt, idx_t sel_idx, PhysicalType phys_type) {
     if (!fmt.validity.RowIsValid(sel_idx)) {
         return 0.0;  // Null or invalid; caller checks validity separately
@@ -130,30 +121,30 @@ void RMIModule::RegisterIndex(DatabaseInstance &db) {
 // Construct (initial build / training)
 //==============================================================================
 
-void RMIIndex::Construct(DataChunk &input, Vector &row_ids, idx_t thread_idx) {
-    lock_guard<mutex> guard(rmi_lock);
+// void RMIIndex::Construct(DataChunk &input, Vector &row_ids, idx_t thread_idx) {
+//     lock_guard<mutex> guard(rmi_lock);
 
-    idx_t n = input.size();
-    training_data.reserve(training_data.size() + n);
+//     idx_t n = input.size();
+//     training_data.reserve(training_data.size() + n);
 
-    UnifiedVectorFormat key_data;
-    input.data[0].ToUnifiedFormat(n, key_data);
+//     UnifiedVectorFormat key_data;
+//     input.data[0].ToUnifiedFormat(n, key_data);
 
-    auto rowid_ptr = (row_t *)row_ids.GetData();
+//     auto rowid_ptr = (row_t *)row_ids.GetData();
 
-    for (idx_t i = 0; i < n; i++) {
-        idx_t sel = key_data.sel->get_index(i);
-        if (!key_data.validity.RowIsValid(sel))
-            continue;
+//     for (idx_t i = 0; i < n; i++) {
+//         idx_t sel = key_data.sel->get_index(i);
+//         if (!key_data.validity.RowIsValid(sel))
+//             continue;
 
-        // Extract the numeric value and convert to double
-        double key = ExtractDoubleValue(key_data, sel, types[0]);
-        row_t rid = rowid_ptr[i];
+//         // Extract the numeric value and convert to double
+//         double key = ExtractDoubleValue(key_data, sel, types[0]);
+//         row_t rid = rowid_ptr[i];
 
-        training_data.emplace_back(key, rid);
-    }
-    total_rows += n;
-}
+//         training_data.emplace_back(key, rid);
+//     }
+//     total_rows += n;
+// }
 
 
 // Compact() – retrain the model + rebuild error bounds
@@ -259,34 +250,43 @@ void RMIIndex::CommitDrop(IndexLock &) {
 }
 
 void RMIIndex::Build(Vector &sorted_keys, Vector &sorted_row_ids, const idx_t row_count) {
-    
-    data_size = row_count;
+    // 1. Prepare the Sorted Struct Array
+    index_data.clear();
+    index_data.reserve(row_count);
+    total_rows = row_count; // Track size of the static part
 
     UnifiedVectorFormat key_data;
     sorted_keys.ToUnifiedFormat(row_count, key_data);
-    
-    base_table_row_ids = (row_t*)sorted_row_ids.GetData();
+    auto raw_row_ids = (row_t*)sorted_row_ids.GetData();
 
-    std::vector<std::pair<double, idx_t>> training_data;
-    training_data.reserve(row_count);
-
+    // Copy data into our struct vector
     for (idx_t i = 0; i < row_count; i++) {
         auto key_idx = key_data.sel->get_index(i);
-
         if (!key_data.validity.RowIsValid(key_idx)) {
             continue;
         }
 
         // Extract the numeric value and convert to double
         double key = ExtractDoubleValue(key_data, key_idx, types[0]);
-        
-        // Get the position (the "Y" value)
-        int64_t position = i;
 
-        // Add (X, Y) to our training data
-        training_data.emplace_back(key, position);
+        RMIEntry entry;
+        entry.key = key;
+        entry.row_id = raw_row_ids[i];
+        index_data.push_back(entry);
     }
-    
+
+    // Ensure strict sorting (vital for binary search or range scans)
+    std::sort(index_data.begin(), index_data.end());
+
+    // 2. Train the Model on the Sorted Array
+    std::vector<std::pair<double, idx_t>> training_data;
+    training_data.reserve(index_data.size());
+
+    for (idx_t i = 0; i < index_data.size(); ++i) {
+        // Training X = key, Y = actual position in the vector
+        training_data.emplace_back(index_data[i].key, (idx_t)i);
+    }
+
     model->Train(training_data);
 }
 
@@ -458,14 +458,18 @@ bool RMIIndex::Scan(IndexScanState &state,
 //==============================================================================
 
 bool RMIIndex::SearchEqual(double key, idx_t max_count, std::set<row_t> &out) {
-    auto bounds = model->GetSearchBounds(key, total_rows);
-    idx_t lo = bounds.first;
-    idx_t hi = bounds.second;
+    auto bounds = model->GetSearchBounds(key, (idx_t)index_data.size());
+    idx_t start = bounds.first;
+    idx_t end = bounds.second;
 
-    for (idx_t i = lo; i < hi; i++) {
-        if (training_data[i].first == key) {
+    // Clamp bounds to index_data size
+    if (start > index_data.size()) start = index_data.size();
+    if (end > index_data.size()) end = index_data.size();
+
+    for (idx_t i = start; i < end; i++) {
+        if (index_data[i].key == key) {
             if (out.size() + 1 > max_count) return false;
-            out.insert(training_data[i].second);
+            out.insert(index_data[i].row_id);
         }
     }
 
@@ -481,14 +485,14 @@ bool RMIIndex::SearchEqual(double key, idx_t max_count, std::set<row_t> &out) {
 }
 
 bool RMIIndex::SearchGreater(double key, bool equal, idx_t max_count, std::set<row_t> &out) {
-    int64_t start = std::max<int64_t>(0, (int64_t)model->PredictPosition(key) + model->GetMinError());
+    idx_t start = model->PredictPosition(key) + model->GetMinError();
 
-    for (idx_t i = start; i < total_rows; i++) {
-        double k = training_data[i].first;
+    for (idx_t i = start; i < index_data.size(); i++) {
+        double k = index_data[i].key;
         bool ok = equal ? (k >= key) : (k > key);
         if (ok) {
             if (out.size() + 1 > max_count) return false;
-            out.insert(training_data[i].second);
+            out.insert(index_data[i].row_id);
         }
     }
 
@@ -506,14 +510,14 @@ bool RMIIndex::SearchGreater(double key, bool equal, idx_t max_count, std::set<r
 }
 
 bool RMIIndex::SearchLess(double key, bool equal, idx_t max_count, std::set<row_t> &out) {
-    int64_t end = std::min<int64_t>(total_rows, (int64_t)model->PredictPosition(key) + model->GetMaxError());
+    idx_t end = std::min<int64_t>(index_data.size(), (idx_t)(model->PredictPosition(key) + model->GetMaxError()));
 
     for (idx_t i = 0; i < end; i++) {
-        double k = training_data[i].first;
+        double k = index_data[i].key;
         bool ok = equal ? (k <= key) : (k < key);
         if (ok) {
             if (out.size() + 1 > max_count) return false;
-            out.insert(training_data[i].second);
+            out.insert(index_data[i].row_id);
         }
     }
 
@@ -536,18 +540,18 @@ bool RMIIndex::SearchCloseRange(double low,
                                 idx_t max_count,
                                 std::set<row_t> &out) {
 
-    int64_t start = std::max<int64_t>(0, (int64_t)model->PredictPosition(low) + model->GetMinError());
-    int64_t end = std::min<int64_t>(total_rows, (int64_t)model->PredictPosition(high) + model->GetMaxError());
+    idx_t start = model->PredictPosition(low) + model->GetMinError();
+    idx_t end = std::min<int64_t>(index_data.size(), (idx_t)(model->PredictPosition(high) + model->GetMaxError()));
 
-    for (int64_t i = start; i < end; i++) {
-        double k = training_data[i].first;
+    for (idx_t i = start; i < end; i++) {
+        double k = index_data[i].key;
 
         bool ok_left = left_eq ? (k >= low) : (k > low);
         bool ok_right = right_eq ? (k <= high) : (k < high);
 
         if (ok_left && ok_right) {
             if (out.size() + 1 > max_count) return false;
-            out.insert(training_data[i].second);
+            out.insert(index_data[i].row_id);
         }
     }
 
