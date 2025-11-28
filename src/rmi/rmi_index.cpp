@@ -1,14 +1,14 @@
 
-#include "src/include/rmi/rmi_index.hpp"
+#include "rmi/rmi_index.hpp"
 
 #include "duckdb/main/extension/extension_loader.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "duckdb/optimizer/matcher/expression_matcher.hpp"
 #include "duckdb/storage/table/scan_state.hpp"
-#include "src/include/rmi/rmi_model.hpp"
+#include "rmi/rmi_model.hpp"
 #include "duckdb/main/database.hpp"
 
-#include "src/include/rmi/rmi_module.hpp"
+#include "rmi/rmi_module.hpp"
 #include "duckdb/planner/expression/bound_comparison_expression.hpp"
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 
@@ -286,7 +286,7 @@ void RMI::Build(Vector &sorted_keys, Vector &sorted_row_ids, const idx_t row_cou
     // 1. Prepare the Sorted Struct Array
     index_data.clear();
     index_data.reserve(row_count);
-    data_size = row_count; // Track size of the static part
+    total_rows = row_count; // Track size of the static part
 
     UnifiedVectorFormat key_data;
     sorted_keys.ToUnifiedFormat(row_count, key_data);
@@ -348,7 +348,7 @@ bool RMI::SearchEqual(double key, idx_t max_count, set<row_t> &row_ids) {
     
     // --- 1. Predict (using our 'model' object) ---
     // 
-    auto [start_pos, end_pos] = model->GetSearchBounds(key, data_size);
+    auto [start_pos, end_pos] = model->GetSearchBounds(key, total_rows);
 
     // Clamp bounds to vector size
     if (start_pos < 0) start_pos = 0;
@@ -386,8 +386,8 @@ bool RMI::SearchGreater(double key, bool equal, idx_t max_count, set<row_t> &row
     int64_t search_start = std::max((int64_t)0, model->PredictPosition(key) + model->min_error);
 
     // --- 2. Main Scan ---
-    // Accessing member 'data_size' implicitly
-    for (int64_t i = search_start; i < data_size; i++) {
+    // Accessing member 'total_rows' implicitly
+    for (int64_t i = search_start; i < total_rows; i++) {
         double current_key = index_data[i].key;
         bool matches = (equal) ? (current_key >= key) : (current_key > key);
 
@@ -418,7 +418,7 @@ bool RMI::SearchGreater(double key, bool equal, idx_t max_count, set<row_t> &row
 bool RMI::SearchLess(double key, bool equal, idx_t max_count, set<row_t> &row_ids) {
     
     // --- 1. Predict End Position ---
-    int64_t search_end = std::min((int64_t)data_size, model->PredictPosition(key) + model->max_error);
+    int64_t search_end = std::min((int64_t)total_rows, model->PredictPosition(key) + model->max_error);
 
     // --- 2. Main Scan ---
     for (int64_t i = 0; i < search_end; i++) {
@@ -458,7 +458,7 @@ bool RMI::SearchCloseRange(double key_low, double key_high, bool left_equal, boo
     // Predict the start of the search
     int64_t search_start = std::max((int64_t)0, model->PredictPosition(key_low) + model->min_error);
     // Predict the end of the search
-    int64_t search_end = std::min((int64_t)data_size, model->PredictPosition(key_high) + model->max_error);
+    int64_t search_end = std::min((int64_t)total_rows, model->PredictPosition(key_high) + model->max_error);
 
     // --- 2. Main Scan (on base table data) ---
     // We scan *only* the small slice of the table between our predicted bounds.

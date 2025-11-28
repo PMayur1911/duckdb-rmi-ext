@@ -1,7 +1,7 @@
-#include "src/include/rmi/rmi_module.hpp"
-#include "src/include/rmi/rmi_index.hpp"
-#include "src/include/rmi/rmi_index_scan.hpp" 
-#include "src/include/rmi/rmi_index.hpp"
+#include "rmi/rmi_module.hpp"
+#include "rmi/rmi_index.hpp"
+#include "rmi/rmi_index_scan.hpp"
+#include "rmi/rmi_index.hpp"
 
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/catalog/dependency_list.hpp"

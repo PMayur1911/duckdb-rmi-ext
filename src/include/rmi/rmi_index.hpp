@@ -9,7 +9,8 @@
 #pragma once
 
 #include "duckdb/execution/index/bound_index.hpp"
-#include "src/include/rmi/rmi_model.hpp"
+#include "rmi/rmi_model.hpp"
+#include "duckdb/storage/table/scan_state.hpp"
 
 
 namespace duckdb {
@@ -106,7 +107,7 @@ public:
     // Pointers to the base table's sorted data
     // (These are set during the Build() phase)
     std::vector<RMIEntry> index_data;
-    idx_t data_size;
+    idx_t total_rows;
 
 private:
 	bool SearchEqual(double key, idx_t max_count, set<row_t> &row_ids);

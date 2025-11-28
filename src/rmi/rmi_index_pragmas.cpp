@@ -1,5 +1,5 @@
-#include "src/include/rmi/rmi_module.hpp"
-#include "src/include/rmi/rmi_index.hpp"
+#include "rmi/rmi_module.hpp"
+#include "rmi/rmi_index.hpp"
 
 #include "duckdb/catalog/catalog_entry/duck_index_entry.hpp"
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
