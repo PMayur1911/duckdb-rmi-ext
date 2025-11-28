@@ -7,6 +7,7 @@
 #include "duckdb/optimizer/matcher/expression_matcher.hpp"
 #include "duckdb/common/types/value.hpp"
 #include "duckdb/storage/storage_lock.hpp"
+#include "duckdb/storage/table/scan_state.hpp"
 
 #include "rmi_base_model.hpp"
 
@@ -14,6 +15,26 @@ namespace duckdb {
 
 class FunctionExpressionMatcher;
 struct RMIIndexScanBindData;
+
+struct RMIIndexScanState : public IndexScanState {
+    Value values[2];
+    ExpressionType expressions[2];
+    bool checked = false;
+    std::set<row_t> row_ids;
+};
+
+struct RMIEntry {
+    double key;
+    row_t row_id;
+
+    // Sort primarily by key, secondarily by row_id
+    bool operator<(const RMIEntry& other) const {
+        if (key != other.key) {
+            return key < other.key;
+        }
+        return row_id < other.row_id;
+    }
+};
 
 struct RMIIndexStats {
     idx_t total_rows = 0;
@@ -63,11 +84,12 @@ public:
     // Internal mutex
     duckdb::mutex rmi_lock;
 
+public:
     // Build
     void Build(Vector &sorted_keys, Vector &sorted_row_ids, idx_t row_count);
 
     // Construction
-    void Construct(DataChunk &input, Vector &row_ids, idx_t thread_idx);
+    // void Construct(DataChunk &input, Vector &row_ids, idx_t thread_idx);
     // void Compact();
 
     std::unique_ptr<RMIIndexStats> GetStats();
@@ -100,6 +122,11 @@ public:
 
     IndexStorageInfo SerializeToDisk(QueryContext context, const case_insensitive_map_t<Value> &options) override;
     IndexStorageInfo SerializeToWAL(const case_insensitive_map_t<Value> &options) override;
+
+    // Pointers to the base table's sorted data
+    // (These are set during the Build() phase)
+    std::vector<RMIEntry> index_data;
+    // idx_t data_size;
 
 private:
     bool is_dirty = false;
