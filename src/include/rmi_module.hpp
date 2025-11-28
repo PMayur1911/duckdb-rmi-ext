@@ -12,7 +12,7 @@ public:
 
         RegisterIndex(db);
         // RegisterIndexScan(loader);
-        // RegisterIndexPragmas(loader);
+        RegisterIndexPragmas(loader);
         // RegisterMacros(loader);
         
         // Optimizers
@@ -30,7 +30,7 @@ private:
     // static void RegisterIndexScan(ExtensionLoader &loader);
 
     // Registers PRAGMA functions such as PRAGMA rmi_index_info();
-    // static void RegisterIndexPragmas(ExtensionLoader &loader);
+    static void RegisterIndexPragmas(ExtensionLoader &loader);
 	
     // static void RegisterMacros(ExtensionLoader &loader);
 
