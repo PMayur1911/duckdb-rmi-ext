@@ -16,7 +16,7 @@ public:
         // RegisterMacros(loader);
         
         // Optimizers
-        // RegisterScanOptimizer(db);
+        RegisterScanOptimizer(db);
 		// RegisterExprOptimizer(db);
 		// RegisterTopKOptimizer(db);
 		// RegisterJoinOptimizer(db);
@@ -36,7 +36,7 @@ private:
 
 
     // Optimizers
-    // static void RegisterScanOptimizer(DatabaseInstance &db);
+    static void RegisterScanOptimizer(DatabaseInstance &db);
 	// static void RegisterExprOptimizer(DatabaseInstance &db);
 	// static void RegisterTopKOptimizer(DatabaseInstance &db);
 	// static void RegisterJoinOptimizer(DatabaseInstance &db);

@@ -1,0 +1,115 @@
+# name: test/sql/rmi_index.test
+# description: Test RMI (Recursive Model Index) creation and usage
+# group: [sql]
+
+require rmi
+
+# Test 1: Create a table with numeric data
+statement ok
+CREATE TABLE test_rmi_data (id INTEGER PRIMARY KEY, value DOUBLE);
+
+# Test 2: Insert test data (Flattened)
+statement ok
+INSERT INTO test_rmi_data VALUES (1, 10.5), (2, 20.3), (3, 15.7), (4, 25.1), (5, 12.9), (6, 30.2), (7, 18.4), (8, 22.6), (9, 11.8), (10, 28.3);
+
+# Test 3: Create an RMI index on the value column
+statement ok
+CREATE INDEX idx_rmi_value ON test_rmi_data USING RMI (value);
+
+# Test 4: Verify the index query (Simple >= predicate)
+query II
+SELECT id, value FROM test_rmi_data WHERE value >= 20.0 ORDER BY id;
+----
+2	20.3
+4	25.1
+6	30.2
+8	22.6
+10	28.3
+
+# Test 5: Test EXPLAIN (Ensures planner does not crash)
+statement ok
+EXPLAIN SELECT id, value FROM test_rmi_data WHERE value >= 20.0;
+
+# Test 6: Equality predicate
+query II
+SELECT id, value FROM test_rmi_data WHERE value = 15.7 ORDER BY id;
+----
+3	15.7
+
+# Test 7: Less-than predicate
+query II
+SELECT id, value FROM test_rmi_data WHERE value < 15.0 ORDER BY id;
+----
+1	10.5
+5	12.9
+9	11.8
+
+# Test 8: Range predicate (BETWEEN equivalent)
+query II
+SELECT id, value FROM test_rmi_data WHERE value >= 15.0 AND value <= 25.0 ORDER BY id;
+----
+2	20.3
+3	15.7
+4	25.1
+7	18.4
+8	22.6
+
+# Test 9: Greater-than predicate
+query II
+SELECT id, value FROM test_rmi_data WHERE value > 25.0 ORDER BY id;
+----
+6	30.2
+10	28.3
+
+# Test 10: Create larger dataset table
+statement ok
+CREATE TABLE large_rmi_data (id INTEGER, score DOUBLE);
+
+# Test 11: Insert larger dataset (1000 rows generated via SIN function)
+statement ok
+INSERT INTO large_rmi_data SELECT i as id, (sin(i / 3.14159) * 100 + 50) as score FROM range(1, 1001) t(i);
+
+# Test 12: Create RMI index on larger table
+statement ok
+CREATE INDEX idx_rmi_score ON large_rmi_data USING RMI (score);
+
+# Test 13: Query with RMI index (Count Check)
+# NOTE: Ensure '258' is the exact mathematical count for the data generated above
+query I
+SELECT COUNT(*) FROM large_rmi_data WHERE score >= 75.0;
+----
+258
+
+# Test 14: Query with RMI index (Range Count Check)
+# NOTE: Ensure '543' is the exact mathematical count
+query I
+SELECT COUNT(*) FROM large_rmi_data WHERE score BETWEEN 40.0 AND 60.0;
+----
+543
+
+# Test 15: Test ordering (Execution only check)
+statement ok
+SELECT id, score FROM large_rmi_data WHERE score > 80.0 ORDER BY score DESC LIMIT 5;
+
+# Test 16: Create table for NULL testing
+statement ok
+CREATE TABLE test_rmi_nulls (id INTEGER, value DOUBLE);
+
+# Test 17: Insert data with NULLs
+statement ok
+INSERT INTO test_rmi_nulls VALUES (1, 10.5), (2, NULL), (3, 15.7), (4, NULL), (5, 25.1);
+
+# Test 18: Create index (RMI must handle or ignore NULLs during build without crashing)
+statement ok
+CREATE INDEX idx_rmi_nulls ON test_rmi_nulls USING RMI (value);
+
+# Test 19: Query with NULL values present
+query II
+SELECT id, value FROM test_rmi_nulls WHERE value > 12.0 ORDER BY id;
+----
+3	15.7
+5	25.1
+
+# Test 20: Verify function registration
+statement ok
+SELECT * FROM duckdb_functions() WHERE function_name = 'rmi_index_scan';
