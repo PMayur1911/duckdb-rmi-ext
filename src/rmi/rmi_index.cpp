@@ -468,8 +468,11 @@ bool RMIIndex::SearchEqual(double key, idx_t max_count, std::set<row_t> &out) {
     if (start > index_data.size()) start = index_data.size();
     if (end > index_data.size()) end = index_data.size();
 
-    for (idx_t i = start; i < end; i++) {
+    for (idx_t i = start; i < end + 10; i++) {
         // Epsilon check for main data
+        if (i >= index_data.size()) 
+            break;
+
         if (std::abs(index_data[i].key - key) < epsilon) {
             if (out.size() + 1 > max_count) return false;
             out.insert(index_data[i].row_id);
