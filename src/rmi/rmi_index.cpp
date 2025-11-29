@@ -456,33 +456,42 @@ bool RMIIndex::Scan(IndexScanState &state,
 //==============================================================================
 // Core Search Routines (adapted to BaseRMIModel)
 //==============================================================================
-
 bool RMIIndex::SearchEqual(double key, idx_t max_count, std::set<row_t> &out) {
+    // 1. Search Main Index (Binary Search / RMI Model)
+    // We still use Epsilon here for the main sorted data
+    const double epsilon = 1e-9;
+    
     auto bounds = model->GetSearchBounds(key, (idx_t)index_data.size());
     idx_t start = bounds.first;
     idx_t end = bounds.second;
 
-    // Clamp bounds to index_data size
     if (start > index_data.size()) start = index_data.size();
     if (end > index_data.size()) end = index_data.size();
 
     for (idx_t i = start; i < end; i++) {
-        if (index_data[i].key == key) {
+        // Epsilon check for main data
+        if (std::abs(index_data[i].key - key) < epsilon) {
             if (out.size() + 1 > max_count) return false;
             out.insert(index_data[i].row_id);
         }
     }
 
-    auto &ov = model->GetOverflowMap();
-    auto it = ov.find(key);
-    if (it != ov.end()) {
-        for (auto rid : it->second) {
-            if (out.size() + 1 > max_count) return false;
-            out.insert(rid);
+    // 2. Search Overflow Map (Linear Scan as requested)
+    for (auto &kv : model->GetOverflowMap()) {
+        double k = kv.first;
+
+        // "k == key" replacement: Check if k is within epsilon of key
+        if (std::abs(k - key) < epsilon) {
+            for (auto rid : kv.second) {
+                if (out.size() + 1 > max_count) return false;
+                out.insert(rid);
+            }
         }
     }
+
     return true;
 }
+
 
 bool RMIIndex::SearchGreater(double key, bool equal, idx_t max_count, std::set<row_t> &out) {
     idx_t start = model->PredictPosition(key) + model->GetMinError();
