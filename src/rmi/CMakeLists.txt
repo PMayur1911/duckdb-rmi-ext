@@ -7,5 +7,7 @@ set(EXTENSION_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/rmi_index_pragmas.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/rmi_index_scan.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/rmi_optimize_scan.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/rmi_poly_model.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/rmi_two_layer_model.cpp
     PARENT_SCOPE
 )
