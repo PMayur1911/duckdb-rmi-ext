@@ -44,6 +44,10 @@ public:
         return SourceResultType::FINISHED;
     }
 
+    string GetName() const override {
+        return "RMI_INDEX_SCAN";
+    }
+
 public:
     // --------- Sink interface (actual index construction happens here) ---------
     bool IsSink() const override { return true; }
