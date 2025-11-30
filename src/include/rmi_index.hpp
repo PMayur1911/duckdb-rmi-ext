@@ -69,6 +69,8 @@ public:
     static PhysicalOperator &CreatePlan(PlanIndexInput &input);
 
     // --- RMI Model ---
+    static const case_insensitive_set_t MODEL_MAP;
+    
     std::unique_ptr<BaseRMIModel> model;
     std::vector<std::pair<double, row_t>> training_data;
     idx_t total_rows = 0;

@@ -3,9 +3,13 @@
 #include "duckdb/planner/expression/bound_constant_expression.hpp"
 #include "duckdb/planner/expression/bound_between_expression.hpp"
 #include "duckdb/optimizer/matcher/expression_matcher.hpp"
+#include "duckdb/common/string_util.hpp"
+#include "duckdb/common/exception.hpp"
 
 #include "rmi_index.hpp"
 #include "rmi_linear_model.hpp"
+#include "rmi_poly_model.hpp"
+#include "rmi_two_layer_model.hpp"
 #include "rmi_module.hpp"
 
 namespace duckdb {
@@ -97,8 +101,22 @@ RMIIndex::RMIIndex(const string &name,
         throw NotImplementedException("RMI index does not support UNIQUE/PRIMARY KEY constraints");
     }
 
-    // Default to Linear Model
-    model = std::make_unique<RMILinearModel>();
+    // Choose model implementation from options (default: linear)
+    string model_name = "linear";
+    auto it = options.find("model");
+    if (it != options.end()) {
+        model_name = StringUtil::Lower(it->second.ToString());
+    }
+
+    if (model_name == "linear") {
+        model = make_uniq<RMILinearModel>();
+    } else if (model_name == "poly") {
+        model = make_uniq<RMIPolyModel>();
+    } else if (model_name == "two_layer" || model_name == "two-layer" || model_name == "two layer") {
+        model = make_uniq<RMITwoLayerModel>();
+    } else {
+        throw InvalidInputException("Unsupported RMI model '%s'. Supported models: linear, poly, two_layer", model_name.c_str());
+    }
 
     total_rows = 0;
 }
@@ -112,6 +130,8 @@ void RMIModule::RegisterIndex(DatabaseInstance &db) {
 
     db.config.GetIndexTypes().RegisterIndexType(type);
 }
+
+const case_insensitive_set_t RMIIndex::MODEL_MAP = { "linear", "poly", "two_layer" };
 
 // PhysicalOperator &RMIIndex::CreatePlan(PlanIndexInput &input) {
 // 	throw NotImplementedException("RMIIndex::CreatePlan will be implemented in rmi_index_plan.cpp");
