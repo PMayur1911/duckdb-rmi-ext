@@ -42,6 +42,25 @@ PhysicalOperator &RMIIndex::CreatePlan(PlanIndexInput &input) {
             throw BinderException("RMI index key must be a numeric type.");
     }
 
+    for (auto &option: create_index.info->options) {
+        auto &k = option.first;
+        auto &v = option.second;
+    
+        if (StringUtil::CIEquals(k, "model")) {
+            if (v.type() != LogicalType::VARCHAR) {
+                throw BinderException("RMI index 'model' must be a string");
+            }
+            auto model = v.GetValue<string>();
+            if (RMIIndex::MODEL_MAP.find(model) == RMIIndex::MODEL_MAP.end()) {
+                vector<string> allowed_models;
+                for (auto &entry : RMIIndex::MODEL_MAP) {
+                    allowed_models.push_back(StringUtil::Format("'%s'", entry));
+                }
+                throw BinderException("RMI index 'model' must be one of: %s", StringUtil::Join(allowed_models, ", "));
+            }
+        }
+    }
+
     // ------------------------------------------------------------
     // 2. Build projection operator to compute the index key
     // ------------------------------------------------------------

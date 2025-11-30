@@ -12,7 +12,6 @@
 #include "duckdb/storage/table_io_manager.hpp"
 
 #include "rmi_index.hpp"
-#include "rmi_linear_model.hpp"
 
 namespace duckdb {
 
