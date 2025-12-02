@@ -1,0 +1,2 @@
+Index Memory (KB): 704
+Index Memory (MB): 0.69
