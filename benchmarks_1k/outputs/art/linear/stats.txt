@@ -1,6 +1,7 @@
-Average (ms): 166.630000
-Min (ms): 132.000000
-Max (ms): 205.000000
-P99 (ms): 205
-Index Memory (KB): 3344
-Index Memory (MB): 3.27
+Average (ms): 144.6
+Min (ms): 97
+Max (ms): 345
+P99 (ms): 326
+Index Build Time (ms): 292
+Index Memory (KB): 2816
+Index Memory (MB): 2.75

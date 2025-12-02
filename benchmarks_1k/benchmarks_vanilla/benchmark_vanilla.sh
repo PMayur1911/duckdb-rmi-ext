@@ -20,10 +20,10 @@ fi
 # BENCHMARK FUNCTION (RUNS 100 QUERIES)
 # ---------------------------------------------------------
 run_benchmark() {
-    local NAME="$1"             # linear | poly | random
-    local INSERT_SQL="$2"       
-    local QUERY_VALUES="$3"     
-    local OUT_DIR="$4"          
+    local NAME="$1"
+    local INSERT_SQL="$2"
+    local QUERY_VALUES="$3"
+    local OUT_DIR="$4"
 
     mkdir -p "$OUT_DIR/query_outputs"
     local RESULTS_FILE="$OUT_DIR/results.txt"
@@ -38,7 +38,7 @@ run_benchmark() {
 
 
     # =====================================================================
-    # 1. VANILLA MEMORY MEASUREMENT (always zero — no index)
+    # 1. VANILLA MEMORY + INDEX BUILD TIME (always zero)
     # =====================================================================
     echo "[*] Measuring memory for vanilla (no index)..."
 
@@ -56,12 +56,16 @@ EOF
 
     [[ -z "${MEM_BASE:-}" ]] && MEM_BASE=0
 
-    # For consistency: vanilla index memory = 0
+    INDEX_BUILD_MS=0
     INDEX_MEM_KB=0
     INDEX_MEM_MB=0.00
 
-    echo "Index Memory (KB): 0" > "$MEM_FILE"
-    echo "Index Memory (MB): 0.00" >> "$MEM_FILE"
+    # Write memory + index build time
+    {
+        echo "Index Build Time (ms): 0"
+        echo "Index Memory (KB): 0"
+        echo "Index Memory (MB): 0.00"
+    } > "$MEM_FILE"
 
     rm -f mem_base.db base_mem.txt
 
@@ -80,7 +84,7 @@ CREATE TEMP TABLE test_rmi_data(id DOUBLE, value DOUBLE);
 
 $INSERT_BLOCK
 
--- VANILLA full scan lookup
+-- VANILLA (no index): full scan
 SELECT id, value
 FROM test_rmi_data
 WHERE value = $target
@@ -98,9 +102,9 @@ EOF
         echo "$runtime_ms" >> "$RESULTS_FILE"
 
         if echo "$output" | grep -q "0 rows"; then
-            misses=$((misses + 1))
+            misses=$((misses+1))
         else
-            hits=$((hits + 1))
+            hits=$((hits+1))
         fi
 
         echo "Query $idx -> ${runtime_ms} ms"
@@ -110,29 +114,27 @@ EOF
 
 
     # =====================================================================
-    # 3. STATS
+    # 3. TIMING STATS
     # =====================================================================
     echo "[*] Computing stats for $NAME..."
 
-    awk '
-    {
-        sum += $1
-        count += 1
-        if (NR == 1 || $1 < min) min = $1
-        if (NR == 1 || $1 > max) max = $1
-    }
-    END {
-        avg = sum / count
-        printf("Average (ms): %f\nMin (ms): %f\nMax (ms): %f\n", avg, min, max)
-    }' "$RESULTS_FILE" > "$STATS_FILE"
+    avg=$(awk '{s+=$1} END{print s/NR}' "$RESULTS_FILE")
+    min=$(sort -n "$RESULTS_FILE" | head -n 1)
+    max=$(sort -n "$RESULTS_FILE" | tail -n 1)
 
     total=$(wc -l < "$RESULTS_FILE")
     p99_index=$(( (total * 99 + 99) / 100 ))
     p99=$(sort -n "$RESULTS_FILE" | sed -n "${p99_index}p")
 
-    echo "P99 (ms): $p99" >> "$STATS_FILE"
-    echo "Index Memory (KB): 0" >> "$STATS_FILE"
-    echo "Index Memory (MB): 0.00" >> "$STATS_FILE"
+    {
+        echo "Average (ms): $avg"
+        echo "Min (ms): $min"
+        echo "Max (ms): $max"
+        echo "P99 (ms): $p99"
+        echo "Index Build Time (ms): 0"
+        echo "Index Memory (KB): 0"
+        echo "Index Memory (MB): 0.00"
+    } > "$STATS_FILE"
 
 
     # =====================================================================
@@ -141,10 +143,12 @@ EOF
     hit_rate=$(awk -v h="$hits" 'BEGIN { printf "%.2f", (h/100)*100 }')
     miss_rate=$(awk -v m="$misses" 'BEGIN { printf "%.2f", (m/100)*100 }')
 
-    echo "Hits: $hits" > "$ACC_FILE"
-    echo "Misses: $misses" >> "$ACC_FILE"
-    echo "Hit Rate (%): $hit_rate" >> "$ACC_FILE"
-    echo "Miss Rate (%): $miss_rate" >> "$ACC_FILE"
+    {
+        echo "Hits: $hits"
+        echo "Misses: $misses"
+        echo "Hit Rate (%): $hit_rate"
+        echo "Miss Rate (%): $miss_rate"
+    } > "$ACC_FILE"
 
     echo "[*] Accuracy stats written to: $ACC_FILE"
 }
