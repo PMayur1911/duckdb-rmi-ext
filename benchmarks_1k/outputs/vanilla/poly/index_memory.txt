@@ -1,2 +1,3 @@
+Index Build Time (ms): 0
 Index Memory (KB): 0
 Index Memory (MB): 0.00

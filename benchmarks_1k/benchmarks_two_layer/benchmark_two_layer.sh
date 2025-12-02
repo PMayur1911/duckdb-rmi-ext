@@ -20,10 +20,10 @@ fi
 # BENCHMARK FUNCTION (RUNS 100 QUERIES)
 # ---------------------------------------------------------
 run_benchmark() {
-    local NAME="$1"             # linear | poly | random
-    local INSERT_SQL="$2"       # insert_data_linear.sql
-    local QUERY_VALUES="$3"     # query_values_linear.txt
-    local OUT_DIR="$4"          # outputs/rmi_two_layer/linear/
+    local NAME="$1"
+    local INSERT_SQL="$2"
+    local QUERY_VALUES="$3"
+    local OUT_DIR="$4"
 
     mkdir -p "$OUT_DIR/query_outputs"
     local RESULTS_FILE="$OUT_DIR/results.txt"
@@ -38,14 +38,13 @@ run_benchmark() {
 
 
     # =====================================================================
-    # 1. ONE-TIME INDEX MEMORY MEASUREMENT
+    # 1. ONE-TIME INDEX MEMORY + INDEX CREATION TIME
     # =====================================================================
-    echo "[*] Measuring RMI-two_layer index memory usage..."
+    echo "[*] Measuring RMI-two_layer index memory + build time..."
 
     BASE_SQL=$(cat <<EOF
 CREATE TABLE test_rmi_data(id DOUBLE, value DOUBLE);
 $INSERT_BLOCK
--- no index
 EOF
 )
 
@@ -58,7 +57,7 @@ WITH (model='two_layer');
 EOF
 )
 
-    # ---- baseline memory ----
+    # ---- measure baseline memory ----
     $TIME_BIN -v $DUCKDB mem_base.db -c "$BASE_SQL" \
         > /dev/null 2> base_mem.txt || true
 
@@ -66,25 +65,38 @@ EOF
                | grep -Eo "[0-9]+" | head -n 1)
     [[ -z "${MEM_BASE:-}" ]] && MEM_BASE=0
 
-    # ---- memory with index ----
+
+    # ---- measure index build time ----
+    INDEX_BUILD_START=$(date +%s%N)
+
     $TIME_BIN -v $DUCKDB mem_index.db -c "$INDEX_SQL" \
         > /dev/null 2> index_mem.txt || true
 
+    INDEX_BUILD_END=$(date +%s%N)
+    INDEX_BUILD_MS=$(( (INDEX_BUILD_END - INDEX_BUILD_START) / 1000000 ))
+
+
+    # ---- memory after index ----
     MEM_FULL=$(grep -Ei "maximum resident set size|resident set size" index_mem.txt \
                | grep -Eo "[0-9]+" | head -n 1)
     [[ -z "${MEM_FULL:-}" ]] && MEM_FULL=0
 
-    # ---- true index memory ----
+
+    # ---- compute true index memory ----
     INDEX_MEM_KB=$(( MEM_FULL - MEM_BASE ))
     (( INDEX_MEM_KB < 0 )) && INDEX_MEM_KB=0
 
     INDEX_MEM_MB=$(awk -v kb="$INDEX_MEM_KB" 'BEGIN { printf "%.2f", kb/1024 }')
 
+    echo "Index Build Time (ms): $INDEX_BUILD_MS"
     echo "Index Memory (KB): $INDEX_MEM_KB"
     echo "Index Memory (MB): $INDEX_MEM_MB"
 
-    echo "Index Memory (KB): $INDEX_MEM_KB" > "$MEM_FILE"
-    echo "Index Memory (MB): $INDEX_MEM_MB" >> "$MEM_FILE"
+    {
+        echo "Index Build Time (ms): $INDEX_BUILD_MS"
+        echo "Index Memory (KB): $INDEX_MEM_KB"
+        echo "Index Memory (MB): $INDEX_MEM_MB"
+    } > "$MEM_FILE"
 
     rm -f mem_base.db mem_index.db base_mem.txt index_mem.txt
 
@@ -103,12 +115,10 @@ CREATE TEMP TABLE test_rmi_data(id DOUBLE, value DOUBLE);
 
 $INSERT_BLOCK
 
--- Create RMI (two_layer model)
 CREATE INDEX idx_rmi_value
 ON test_rmi_data USING RMI (value)
 WITH (model='two_layer');
 
--- Point lookup
 SELECT id, value
 FROM test_rmi_data
 WHERE value = $target
@@ -125,11 +135,10 @@ EOF
         echo "$output" > "$OUT_DIR/query_outputs/output_${idx}.txt"
         echo "$runtime_ms" >> "$RESULTS_FILE"
 
-        # hit/miss
         if echo "$output" | grep -q "0 rows"; then
-            misses=$((misses + 1))
+            misses+=1
         else
-            hits=$((hits + 1))
+            hits+=1
         fi
 
         echo "Query $idx -> ${runtime_ms} ms"
@@ -143,25 +152,23 @@ EOF
     # =====================================================================
     echo "[*] Computing stats for $NAME..."
 
-    awk '
-    {
-        sum += $1
-        count += 1
-        if (NR == 1 || $1 < min) min = $1
-        if (NR == 1 || $1 > max) max = $1
-    }
-    END {
-        avg = sum / count
-        printf("Average (ms): %f\nMin (ms): %f\nMax (ms): %f\n", avg, min, max)
-    }' "$RESULTS_FILE" > "$STATS_FILE"
+    avg=$(awk '{s+=$1} END{print s/NR}' "$RESULTS_FILE")
+    min=$(sort -n "$RESULTS_FILE" | head -n 1)
+    max=$(sort -n "$RESULTS_FILE" | tail -n 1)
 
     total=$(wc -l < "$RESULTS_FILE")
     p99_index=$(( (total * 99 + 99) / 100 ))
     p99=$(sort -n "$RESULTS_FILE" | sed -n "${p99_index}p")
 
-    echo "P99 (ms): $p99" >> "$STATS_FILE"
-    echo "Index Memory (KB): $INDEX_MEM_KB" >> "$STATS_FILE"
-    echo "Index Memory (MB): $INDEX_MEM_MB" >> "$STATS_FILE"
+    {
+        echo "Average (ms): $avg"
+        echo "Min (ms): $min"
+        echo "Max (ms): $max"
+        echo "P99 (ms): $p99"
+        echo "Index Build Time (ms): $INDEX_BUILD_MS"
+        echo "Index Memory (KB): $INDEX_MEM_KB"
+        echo "Index Memory (MB): $INDEX_MEM_MB"
+    } > "$STATS_FILE"
 
 
     # =====================================================================
@@ -170,10 +177,12 @@ EOF
     hit_rate=$(awk -v h="$hits" 'BEGIN { printf "%.2f", (h/100)*100 }')
     miss_rate=$(awk -v m="$misses" 'BEGIN { printf "%.2f", (m/100)*100 }')
 
-    echo "Hits: $hits" > "$ACC_FILE"
-    echo "Misses: $misses" >> "$ACC_FILE"
-    echo "Hit Rate (%): $hit_rate" >> "$ACC_FILE"
-    echo "Miss Rate (%): $miss_rate" >> "$ACC_FILE"
+    {
+        echo "Hits: $hits"
+        echo "Misses: $misses"
+        echo "Hit Rate (%): $hit_rate"
+        echo "Miss Rate (%): $miss_rate"
+    } > "$ACC_FILE"
 }
 
 
