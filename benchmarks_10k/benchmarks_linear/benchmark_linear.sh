@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DUCKDB="../../duckdb-rmi-ext/build/release/duckdb"
+DUCKDB="../../build/release/duckdb"
 
 # Detect /usr/bin/time
 if command -v /usr/bin/time >/dev/null 2>&1; then
