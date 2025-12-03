@@ -12,8 +12,18 @@
 #include "rmi_two_layer_model.hpp"
 #include "rmi_module.hpp"
 
+#include <fstream>
+#include <sstream>
 namespace duckdb {
 
+static void RMILog(const std::string &msg) {
+    std::ofstream log("/tmp/rmi_indexxx.log", std::ios::app);
+    if (log.is_open()) {
+        log << msg << std::endl;
+        log.close();
+    }
+}
+    
 // Helper: Extract numeric value from UnifiedVectorFormat and convert to double
 static double ExtractDoubleValue(const UnifiedVectorFormat &fmt, idx_t sel_idx, PhysicalType phys_type) {
     if (!fmt.validity.RowIsValid(sel_idx)) {
@@ -269,31 +279,33 @@ void RMIIndex::CommitDrop(IndexLock &) {
     model.reset();
 }
 
-void RMIIndex::Build(Vector &sorted_keys, Vector &sorted_row_ids, const idx_t row_count) {
+void RMIIndex::Build(const std::vector<std::pair<double, row_t>> &sorted_data) {
     // 1. Prepare the Sorted Struct Array
     index_data.clear();
-    index_data.reserve(row_count);
-    total_rows = row_count; // Track size of the static part
+    index_data.reserve(sorted_data.size());
+    total_rows = sorted_data.size(); // Track size of the static part
 
-    UnifiedVectorFormat key_data;
-    sorted_keys.ToUnifiedFormat(row_count, key_data);
-    auto raw_row_ids = (row_t*)sorted_row_ids.GetData();
+    RMILog("Building RMI Index with " + std::to_string(total_rows) + " entries.\n");
 
-    // Copy data into our struct vector
-    for (idx_t i = 0; i < row_count; i++) {
-        auto key_idx = key_data.sel->get_index(i);
-        if (!key_data.validity.RowIsValid(key_idx)) {
-            continue;
-        }
-
-        // Extract the numeric value and convert to double
-        double key = ExtractDoubleValue(key_data, key_idx, types[0]);
-
+    // Copy data into our struct vector (input is already sorted by key)
+    for (auto &kv : sorted_data) {
         RMIEntry entry;
-        entry.key = key;
-        entry.row_id = raw_row_ids[i];
+        entry.key = kv.first;
+        entry.row_id = kv.second;
         index_data.push_back(entry);
     }
+
+    int i = 0;
+    RMILog("Printing the index_data before sort:\n");
+    for (auto it = index_data.begin(); it != index_data.end(); it++) {
+        RMILog("\t{ " + std::to_string(it->key) + ", " + std::to_string(it->row_id) + "}");
+        i++;
+        if (i > 100) {
+            break;
+        }
+    }
+    RMILog("End of index_data before sort\n");
+
 
     // Ensure strict sorting (vital for binary search or range scans)
     std::sort(index_data.begin(), index_data.end());
@@ -307,7 +319,26 @@ void RMIIndex::Build(Vector &sorted_keys, Vector &sorted_row_ids, const idx_t ro
         training_data.emplace_back(index_data[i].key, (idx_t)i);
     }
 
+    i = 0;
+    RMILog("Printing the Training_data:\n");
+    for (auto it = training_data.begin(); it != training_data.end(); it++) {
+        RMILog("\t{ " + std::to_string(it->first) + ", " + std::to_string(it->second) + "}");
+        i++;
+        if (i > 100) {
+            break;
+        }
+    }
+    RMILog("End of Training_data\n");
+
     model->Train(training_data);
+
+    // RMILog("Printing the index_data after sort:\n");
+    // for (auto it = index_data.begin(); it != index_data.end(); it++) {
+    //     RMILog("{ " + std::to_string(it->key) + ", " + std::to_string(it->row_id) + "}\n");
+    // }
+    // RMILog("End of index_data after sort\n");
+
+
 }
 
 void RMIIndex::Vacuum(IndexLock &) {}
@@ -538,6 +569,13 @@ bool RMIIndex::SearchGreater(double key, bool equal, idx_t max_count, std::set<r
             }
         }
     }
+
+    // RMILog("Printing the SearchGreater Results:\n");
+    // for (std::set<row_t>::iterator it = out.begin(); it != out.end(); it++) {
+    //     RMILog(std::to_string(*it) + "\n");
+    // }
+    // RMILog("End of SearchGreater Result\n");
+
     return true;
 }
 

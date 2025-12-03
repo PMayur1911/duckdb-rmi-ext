@@ -1,6 +1,0 @@
-Average (ms): 326.210000
-Min (ms): 0.000000
-Max (ms): 553.000000
-P99 (ms): 504
-Index Memory (KB): 1556
-Index Memory (MB): 1.52

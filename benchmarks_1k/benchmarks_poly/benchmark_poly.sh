@@ -137,9 +137,9 @@ EOF
         echo "$runtime_ms" >> "$RESULTS_FILE"
 
         if echo "$output" | grep -q "0 rows"; then
-            misses+=1
+            misses=$((misses + 1))
         else
-            hits+=1
+            hits=$((hits + 1))
         fi
 
         echo "Query $idx -> ${runtime_ms} ms"

@@ -1,4 +1,0 @@
-Hits: 67
-Misses: 33
-Hit Rate (%): 67.00
-Miss Rate (%): 33.00

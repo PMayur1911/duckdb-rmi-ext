@@ -1,78 +1,62 @@
 #pragma once
 
 #include "rmi_base_model.hpp"
-#include <cmath>
-#include <algorithm>
+#include <vector>
 
 namespace duckdb {
 
 class RMITwoLayerModel : public BaseRMIModel {
 public:
-    // -------------------------
-    // Stage 1: Root Linear Model
-    // -------------------------
+    RMITwoLayerModel();
+    ~RMITwoLayerModel() override = default;
+
+    string model_name;
+
+    // Stage-1 root linear model
     double root_slope = 0.0;
     double root_intercept = 0.0;
 
-    // -------------------------
-    // Stage 2: Piecewise Linear Models
-    // -------------------------
-    vector<double> leaf_slopes;
-    vector<double> leaf_intercepts;
-    vector<idx_t> segment_bounds;   // size K+1, bounds of segments
-    idx_t K = 0;                    // number of segments
+    // Stage-2: leaf linear models
+    idx_t K = 0;
+    std::vector<double> leaf_slopes;
+    std::vector<double> leaf_intercepts;
+    std::vector<idx_t> segment_bounds;
 
-    // Global error bounds
-    int64_t min_error = 0;
-    int64_t max_error = 0;
+    // Error bounds
+    int64_t min_error;
+    int64_t max_error;
 
-    // Overflow (key -> row_ids)
-    duckdb::unordered_map<double, std::vector<row_t>> overflow_index;
+    // Overflow map
+    unordered_map<double, std::vector<row_t>> overflow_index;
 
-    // Window radius for local scan
-    idx_t window_radius = 64;
-
-public:
-    RMITwoLayerModel() = default;
-    ~RMITwoLayerModel() override = default;
-
-    // -------------------------
-    // Main Interface
-    // -------------------------
+    // Core API
     void Train(const std::vector<std::pair<double, idx_t>> &data) override;
+
     idx_t Predict(double key) const override;
-    pair<idx_t, idx_t> GetSearchBounds(double key, idx_t total_rows) const override;
+    std::pair<idx_t,idx_t> GetSearchBounds(double key, idx_t total_rows) const override;
 
     void InsertIntoOverflow(double key, row_t row_id) override;
     void DeleteFromOverflow(double key, row_t row_id) override;
 
-    int64_t GetMinError() const override { return min_error; }
-    int64_t GetMaxError() const override { return max_error; }
-
-    const std::unordered_map<double, std::vector<row_t>>& GetOverflowMap() const override {
+    const unordered_map<double, std::vector<row_t>>& GetOverflowMap() const override {
         return overflow_index;
     }
 
     idx_t PredictPosition(double key) const override { return Predict(key); }
 
+    int64_t GetMinError() const override { return min_error; }
+    int64_t GetMaxError() const override { return max_error; }
+
 private:
-
-    // -------------------------
-    // Stage 1: root-model fitting
-    // -------------------------
     void TrainRootModel(const std::vector<std::pair<double, idx_t>> &data);
-
-    // -------------------------
-    // Stage 2: segment assignment + local linear fits
-    // -------------------------
     void BuildSegments(const std::vector<std::pair<double, idx_t>> &data);
 
     idx_t PredictSegment(double key) const;
-    idx_t ClampSegment(idx_t s) const;
+    idx_t PredictLeaf(idx_t seg, double key) const;
 
-    // Evaluate leaf model
-    idx_t PredictLeaf(idx_t segment, double key) const;
-
+    inline idx_t ClampSegment(idx_t s) const {
+        return (s >= K ? K - 1 : s);
+    }
 };
 
 } // namespace duckdb

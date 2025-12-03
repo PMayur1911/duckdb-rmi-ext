@@ -1,3 +1,0 @@
-Index Build Time (ms): 248
-Index Memory (KB): 528
-Index Memory (MB): 0.52
