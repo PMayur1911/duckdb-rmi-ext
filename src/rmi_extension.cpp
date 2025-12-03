@@ -9,12 +9,6 @@ namespace duckdb {
 static void LoadInternal(ExtensionLoader &loader) {
 	// Register the RMI index module
 	RMIModule::Register(loader);
-
-	// IndexType rmi_index_type;
-	// rmi_index_type.name = RMIIndex::TYPE_NAME;
-	// rmi_index_type.create_instance = RMIIndex::Create;
-	// rmi_index_type.create_plan = RMIIndex::CreatePlan;
-	// loader.RegisterIndexType(rmi_index_type);
 }
 
 void RmiExtension::Load(ExtensionLoader &loader) {

@@ -17,9 +17,7 @@ PhysicalOperator &RMIIndex::CreatePlan(PlanIndexInput &input) {
     auto &create_index = input.op;
     auto &planner = input.planner;
 
-    // ------------------------------------------------------------
-    // 1. Validate we have only ONE expression
-    // ------------------------------------------------------------
+    // Validate we have only ONE expression
     if (create_index.expressions.size() != 1) {
         throw BinderException("RMI indexes can only be created over a single numeric column.");
     }
@@ -61,9 +59,7 @@ PhysicalOperator &RMIIndex::CreatePlan(PlanIndexInput &input) {
         }
     }
 
-    // ------------------------------------------------------------
-    // 2. Build projection operator to compute the index key
-    // ------------------------------------------------------------
+    // Build projection operator to compute the index key
     vector<LogicalType> proj_types;
     vector<unique_ptr<Expression>> select_list;
 
@@ -82,9 +78,7 @@ PhysicalOperator &RMIIndex::CreatePlan(PlanIndexInput &input) {
 
     projection.children.push_back(input.table_scan);
 
-    // ------------------------------------------------------------
-    // 3. Add a NOT-NULL filter on the key column
-    // ------------------------------------------------------------
+    // Add a NOT-NULL filter on the key column
     vector<LogicalType> filter_types;
     vector<unique_ptr<Expression>> filter_exprs;
 
@@ -102,9 +96,7 @@ PhysicalOperator &RMIIndex::CreatePlan(PlanIndexInput &input) {
     null_filter.types.emplace_back(LogicalType::ROW_TYPE);
     null_filter.children.push_back(projection);
 
-    // ------------------------------------------------------------
-    // 4. Create PhysicalCreateRMIIndex operator
-    // ------------------------------------------------------------
+    // Create PhysicalCreateRMIIndex operator
     auto &physical_create_index = planner.Make<PhysicalCreateRMIIndex>(
         create_index.types,
         create_index.table,

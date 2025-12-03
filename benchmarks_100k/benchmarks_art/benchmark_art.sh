@@ -14,9 +14,9 @@ else
 fi
 
 
-# =====================================================================
+
 # BENCHMARK FUNCTION — SAFE EXEC + MEMORY MEASUREMENTS
-# =====================================================================
+
 run_benchmark() {
     local NAME="$1"        # linear | poly | random
     local INSERT_SQL="$2"
@@ -36,9 +36,9 @@ run_benchmark() {
 
     INSERT_BLOCK=$(cat "$INSERT_SQL")
 
-    # =====================================================================
+    
     # STEP 1 — MEMORY MEASUREMENT (base vs indexed)
-    # =====================================================================
+    
     echo "[*] Measuring ART index memory..."
 
     BASE_SQL=$(cat <<EOF
@@ -90,9 +90,9 @@ EOF
     rm -f mem_base_100k.db mem_index_100k.db base_mem.txt index_mem.txt
 
 
-    # =====================================================================
+    
     # STEP 2 — RUN 100 QUERIES
-    # =====================================================================
+    
     echo "[*] Executing 100 ART point-lookup queries..."
 
     idx=1
@@ -144,9 +144,9 @@ EOF
     rm -f tmp_query.sql
 
 
-    # =====================================================================
+    
     # STEP 3 — STATS
-    # =====================================================================
+    
     echo "[*] Computing statistics..."
 
     avg=$(awk '{s+=$1} END{print s/NR}' "$RESULTS_FILE")
@@ -167,9 +167,9 @@ EOF
     } > "$STATS_FILE"
 
 
-    # =====================================================================
+    
     # STEP 4 — ACCURACY
-    # =====================================================================
+    
     hit_rate=$(awk -v h="$hits" 'BEGIN { printf "%.2f", h }')
     miss_rate=$(awk -v m="$misses" 'BEGIN { printf "%.2f", m }')
 
@@ -184,9 +184,9 @@ EOF
 }
 
 
-# =====================================================================
+
 # RUN ALL THREE ART BENCHMARKS (for 100k datasets)
-# =====================================================================
+
 run_benchmark \
     "linear_100k" \
     "../insert/insert_data_linear_100k.sql" \

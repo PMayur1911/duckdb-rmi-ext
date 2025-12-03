@@ -59,7 +59,7 @@ public:
              const IndexStorageInfo &info = IndexStorageInfo(),
              idx_t estimated_cardinality = 0);
 
-	//! Create a index instance of this type
+	// Create a index instance of this type
     static unique_ptr<BoundIndex> Create(CreateIndexInput &input) {
         auto rmi = make_uniq<RMIIndex>(input.name, input.constraint_type, input.column_ids, input.table_io_manager,
 		                          input.unbound_expressions, input.db, input.options, input.storage_info);
@@ -75,7 +75,6 @@ public:
     std::vector<std::pair<double, row_t>> training_data;
     idx_t total_rows = 0;
 
-    // --- Required for Option A (full scan functionality) ---
 	std::vector<double> owned_keys;
 	std::vector<row_t> owned_rowids;
 
@@ -89,10 +88,6 @@ public:
 public:
     // Build
     void Build(const std::vector<std::pair<double, row_t>> &sorted_data);
-
-    // Construction
-    // void Construct(DataChunk &input, Vector &row_ids, idx_t thread_idx);
-    // void Compact();
 
     std::unique_ptr<RMIIndexStats> GetStats();
 
@@ -128,7 +123,6 @@ public:
     // Pointers to the base table's sorted data
     // (These are set during the Build() phase)
     std::vector<RMIEntry> index_data;
-    // idx_t data_size;
 
 private:
     bool is_dirty = false;

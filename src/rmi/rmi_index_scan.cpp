@@ -23,11 +23,8 @@ BindInfo RMIIndexScanBindInfo(const optional_ptr<FunctionData> bind_data_p) {
     return BindInfo(bind_data.table);
 }
 
-//-------------------------------------------------------------------------
-// Global State
-//-------------------------------------------------------------------------
 struct RMIIndexScanGlobalState final : public GlobalTableFunctionState {
-    //! The DataChunk containing all read columns.
+    // The DataChunk containing all read columns.
     DataChunk all_columns;
     vector<idx_t> projection_ids;
 
@@ -62,7 +59,6 @@ static unique_ptr<GlobalTableFunctionState> RMIIndexScanInitGlobal(ClientContext
     result->local_storage_state.Initialize(result->column_ids, context, input.filters);
     local_storage.InitializeScan(bind_data.table.GetStorage(), result->local_storage_state.local_state, input.filters);
 
-    // --- CHANGE: Initialize the scan state for the RMI index ---
     // We recreate the state that RMI::Scan expects (values and expressions)
     auto rmi_state = make_uniq<RMIIndexScanState>();
     
@@ -73,7 +69,6 @@ static unique_ptr<GlobalTableFunctionState> RMIIndexScanInitGlobal(ClientContext
     rmi_state->expressions[1] = bind_data.expressions[1];
     
     result->index_state = std::move(rmi_state);
-    // -----------------------------------------------------------
 
     // Early out if there is nothing to project
     if (!input.CanRemoveFilterColumns()) {
@@ -98,9 +93,6 @@ static unique_ptr<GlobalTableFunctionState> RMIIndexScanInitGlobal(ClientContext
     return std::move(result);
 }
 
-//-------------------------------------------------------------------------
-// Execute
-//-------------------------------------------------------------------------
 static void RMIIndexScanExecute(ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
 
     auto &bind_data = data_p.bind_data->Cast<RMIIndexScanBindData>();
@@ -110,17 +102,17 @@ static void RMIIndexScanExecute(ClientContext &context, TableFunctionInput &data
     // Get the specific RMI state
     auto &rmi_state = state.index_state->Cast<RMIIndexScanState>();
 
-    // 1. Check if we have already scanned. 
+    // Check if we have already scanned. 
     // Since RMI::Scan (as implemented) is not resumable/paging, we do it once.
     if (rmi_state.checked) {
         output.SetCardinality(0);
         return;
     }
 
-    // 2. Prepare a temporary set to hold the results from RMI
+    // Prepare a temporary set to hold the results from RMI
     std::set<row_t> result_set;
 
-    // 3. Call Scan
+    // Call Scan
     // We pass STANDARD_VECTOR_SIZE to limit the number of rows (though our RMI currently effectively does one pass)
     bind_data.index.Cast<RMIIndex>().Scan(rmi_state, STANDARD_VECTOR_SIZE, result_set);
     
@@ -135,15 +127,13 @@ static void RMIIndexScanExecute(ClientContext &context, TableFunctionInput &data
         return;
     }
 
-    // 4. Copy the results from std::set to the DuckDB Vector
+    // Copy the results from std::set to the DuckDB Vector
     // We get a raw pointer to the vector's data
     auto row_ids_ptr = FlatVector::GetData<row_t>(state.row_ids);
     idx_t i = 0;
     for (const auto &row_id : result_set) {
         row_ids_ptr[i++] = row_id;
     }
-
-    // --- The rest matches standard index scan logic ---
 
     // Fetch the data from the local storage given the row ids
     if (state.projection_ids.empty()) {
@@ -159,9 +149,6 @@ static void RMIIndexScanExecute(ClientContext &context, TableFunctionInput &data
     output.ReferenceColumns(state.all_columns, state.projection_ids);
 }
 
-//-------------------------------------------------------------------------
-// Statistics
-//-------------------------------------------------------------------------
 static unique_ptr<BaseStatistics> RMIIndexScanStatistics(ClientContext &context, const FunctionData *bind_data_p,
                                                          column_t column_id) {
     auto &bind_data = bind_data_p->Cast<RMIIndexScanBindData>();
@@ -172,17 +159,11 @@ static unique_ptr<BaseStatistics> RMIIndexScanStatistics(ClientContext &context,
     return bind_data.table.GetStatistics(context, column_id);
 }
 
-//-------------------------------------------------------------------------
-// Dependency
-//-------------------------------------------------------------------------
 void RMIIndexScanDependency(LogicalDependencyList &entries, const FunctionData *bind_data_p) {
     auto &bind_data = bind_data_p->Cast<RMIIndexScanBindData>();
     entries.AddDependency(bind_data.table);
 }
 
-//-------------------------------------------------------------------------
-// Cardinality
-//-------------------------------------------------------------------------
 unique_ptr<NodeStatistics> RMIIndexScanCardinality(ClientContext &context, const FunctionData *bind_data_p) {
     auto &bind_data = bind_data_p->Cast<RMIIndexScanBindData>();
     auto &local_storage = LocalStorage::Get(context, bind_data.table.catalog);
@@ -192,9 +173,6 @@ unique_ptr<NodeStatistics> RMIIndexScanCardinality(ClientContext &context, const
     return make_uniq<NodeStatistics>(table_rows, estimated_cardinality);
 }
 
-//-------------------------------------------------------------------------
-// ToString
-//-------------------------------------------------------------------------
 static InsertionOrderPreservingMap<string> RMIIndexScanToString(TableFunctionToStringInput &input) {
     D_ASSERT(input.bind_data);
     InsertionOrderPreservingMap<string> result;
@@ -204,9 +182,6 @@ static InsertionOrderPreservingMap<string> RMIIndexScanToString(TableFunctionToS
     return result;
 }
 
-//-------------------------------------------------------------------------
-// De/Serialize
-//-------------------------------------------------------------------------
 static void RMIScanSerialize(Serializer &serializer, const optional_ptr<FunctionData> bind_data_p,
                              const TableFunction &function) {
     auto &bind_data = bind_data_p->Cast<RMIIndexScanBindData>();
@@ -215,7 +190,6 @@ static void RMIScanSerialize(Serializer &serializer, const optional_ptr<Function
     serializer.WriteProperty(102, "table", bind_data.table.name);
     serializer.WriteProperty(103, "index_name", bind_data.index.GetIndexName());
 
-    // --- CHANGE: Serialize Predicates instead of BBox ---
     serializer.WriteObject(104, "predicates", [&](Serializer &ser) {
         ser.WriteProperty(0, "val0", bind_data.values[0]);
         ser.WriteProperty(1, "val1", bind_data.values[1]);
@@ -248,14 +222,12 @@ static unique_ptr<FunctionData> RMIScanDeserialize(Deserializer &deserializer, T
         expr0 = ser.ReadProperty<ExpressionType>(2, "expr0");
         expr1 = ser.ReadProperty<ExpressionType>(3, "expr1");
     });
-    // --------------------------------------
 
     auto &duck_table = catalog_entry.Cast<DuckTableEntry>();
     auto &table_info = *catalog_entry.GetStorage().GetDataTableInfo();
 
     unique_ptr<RMIIndexScanBindData> result = nullptr;
 
-    // Use RMI::TYPE_NAME
     table_info.BindIndexes(context, RMIIndex::TYPE_NAME);
     table_info.GetIndexes().Scan([&](Index &index) {
         if (!index.IsBound() || RMIIndex::TYPE_NAME != index.GetIndexType()) {
@@ -263,7 +235,6 @@ static unique_ptr<FunctionData> RMIScanDeserialize(Deserializer &deserializer, T
         }
         auto &index_entry = index.Cast<RMIIndex>();
         if (index_entry.GetIndexName() == index_name) {
-            // Reconstruct Bind Data
             result = make_uniq<RMIIndexScanBindData>(duck_table, index_entry);
             result->values[0] = val0;
             result->values[1] = val1;
@@ -280,9 +251,6 @@ static unique_ptr<FunctionData> RMIScanDeserialize(Deserializer &deserializer, T
     return std::move(result);
 }
 
-//-------------------------------------------------------------------------
-// Get Function
-//-------------------------------------------------------------------------
 TableFunction RMIIndexScanFunction::GetFunction() {
     TableFunction func("rmi_index_scan", {}, RMIIndexScanExecute);
     func.init_local = nullptr;
@@ -302,9 +270,7 @@ TableFunction RMIIndexScanFunction::GetFunction() {
     return func;
 }
 
-//-------------------------------------------------------------------------
 // Register
-//-------------------------------------------------------------------------
 void RMIModule::RegisterIndexScan(ExtensionLoader &loader) {
     loader.RegisterFunction(RMIIndexScanFunction::GetFunction());
 }

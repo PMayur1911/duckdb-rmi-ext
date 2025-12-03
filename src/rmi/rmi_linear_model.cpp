@@ -13,9 +13,7 @@ RMILinearModel::RMILinearModel()
         model_name = "RMILinearModel";
 }
 
-RMILinearModel::~RMILinearModel() {
-    // Destructor body (empty for now)
-}
+RMILinearModel::~RMILinearModel() {}
 
 static void RMILog(const std::string &msg) {
     std::ofstream log("/tmp/rmi_model.log", std::ios::app);
@@ -27,17 +25,6 @@ static void RMILog(const std::string &msg) {
 
 void RMILinearModel::Train(const std::vector<std::pair<double, idx_t>> &data) {
     const idx_t n = data.size();
-
-    // int i = 0;
-    // RMILog("[MODEL] Printing the Training_data:\n");
-    // for (auto it = data.begin(); it != data.end(); it++) {
-    //     RMILog("\t[MODEL]{ " + std::to_string(it->first) + ", " + std::to_string(it->second) + "}");
-    //     i++;
-    //     if (i > 100) {
-    //         break;
-    //     }
-    // }
-    // RMILog("[MDOEL]End of Training_data\n");
 
     if (n == 0) {
         slope = 0;
@@ -74,7 +61,7 @@ void RMILinearModel::Train(const std::vector<std::pair<double, idx_t>> &data) {
         intercept = (double)(mean_y - slope * mean_x);
     }
 
-    // === Error Bounds ===
+    // Error Bounds
     min_error = std::numeric_limits<int64_t>::max();
     max_error = std::numeric_limits<int64_t>::min();
 
@@ -85,12 +72,6 @@ void RMILinearModel::Train(const std::vector<std::pair<double, idx_t>> &data) {
         min_error = std::min(min_error, err);
         max_error = std::max(max_error, err);
     }
-
-    // RMILog("Trained StableLinearModel: slope=" + std::to_string(slope) +
-    //        ", intercept=" + std::to_string(intercept) +
-    //        ", min_error=" + std::to_string(min_error) +
-    //        ", max_error=" + std::to_string(max_error) +
-    //         ", number_of_items=" + std::to_string(n));
 }
 
 
@@ -100,7 +81,6 @@ idx_t RMILinearModel::Predict(double key) const {
     if (predicted < 0.0)
         return 0;
 
-    // No clamping to total_rows yet (unknown here)
     return static_cast<idx_t>(predicted);
 }
 
@@ -151,37 +131,5 @@ const std::vector<row_t> *RMILinearModel::GetOverflowRowIDs(double key) const {
     }
     return &it->second;
 }
-
-// ---------------------------------------------------------------------------
-// Serialize
-// ---------------------------------------------------------------------------
-// void RMILinearModel::Serialize(Serializer &serializer) const {
-
-//     // Use Serializer::WriteProperty so serialization works for all serializer implementations
-//     serializer.WriteProperty<double>(100, "slope", slope);
-//     serializer.WriteProperty<double>(101, "intercept", intercept);
-
-//     serializer.WriteProperty<int64_t>(102, "min_error", min_error);
-//     serializer.WriteProperty<int64_t>(103, "max_error", max_error);
-
-//     // Serialize overflow map directly (Serializer has support for duckdb::unordered_map)
-//     serializer.WriteProperty<duckdb::unordered_map<double, std::vector<row_t>>>(104, "overflow_index", overflow_index);
-// }
-
-// ---------------------------------------------------------------------------
-// Deserialize
-// ---------------------------------------------------------------------------
-// void RMILinearModel::Deserialize(Deserializer &deserializer) {
-
-//     // Read properties with the same field ids used in Serialize
-//     slope = deserializer.ReadProperty<double>(100, "slope");
-//     intercept = deserializer.ReadProperty<double>(101, "intercept");
-
-//     min_error = deserializer.ReadProperty<int64_t>(102, "min_error");
-//     max_error = deserializer.ReadProperty<int64_t>(103, "max_error");
-
-//     // Read overflow map
-//     overflow_index = deserializer.ReadProperty<duckdb::unordered_map<double, std::vector<row_t>>>(104, "overflow_index");
-// }
 
 } // namespace duckdb

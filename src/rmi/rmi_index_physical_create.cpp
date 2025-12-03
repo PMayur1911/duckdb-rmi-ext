@@ -15,12 +15,10 @@
 
 namespace duckdb {
 
-//==============================================================================
 // Helper: Extract numeric value from UnifiedVectorFormat and convert to double
-//==============================================================================
 static double ExtractDoubleValue(const UnifiedVectorFormat &fmt, idx_t sel_idx, PhysicalType phys_type) {
     if (!fmt.validity.RowIsValid(sel_idx)) {
-        return 0.0;  // Null or invalid; caller checks validity separately
+        return 0.0;
     }
     
     auto data_ptr = (uint8_t *)fmt.data;
@@ -70,10 +68,6 @@ static double ExtractDoubleValue(const UnifiedVectorFormat &fmt, idx_t sel_idx, 
     }
 }
 
-//================================================================================================
-// PhysicalCreateRMIIndex Constructor
-//================================================================================================
-
 PhysicalCreateRMIIndex::PhysicalCreateRMIIndex(
     PhysicalPlan &plan,
     const vector<LogicalType> &types_p,
@@ -87,17 +81,14 @@ PhysicalCreateRMIIndex::PhysicalCreateRMIIndex(
       info(std::move(info_p)),
       unbound_expressions(std::move(unbound_exprs_p)) {
 
-    //! Convert logical → physical column ids
+    // Convert logical → physical column ids
     for (auto &cid : column_ids) {
         auto phys = table.GetColumns().LogicalToPhysical(LogicalIndex(cid)).index;
         storage_ids.push_back(phys);
     }
 }
 
-//================================================================================================
 // Global Sink State
-//================================================================================================
-
 class CreateRMIIndexGlobalState final : public GlobalSinkState {
 public:
     explicit CreateRMIIndexGlobalState(const PhysicalCreateRMIIndex &op)
@@ -106,29 +97,29 @@ public:
 
     const PhysicalCreateRMIIndex &op;
 
-    //! Key-RowID data from all threads
+    // Key-RowID data from all threads
     unique_ptr<ColumnDataCollection> collection;
 
-    //! Global index instance (unregistered)
+    // Global index instance (unregistered)
     unique_ptr<RMIIndex> global_index;
 
-    //! Client context
+    // Client context
     shared_ptr<ClientContext> client_ctx;
 
-    //! Parallel scan state
+    // Parallel scan state
     ColumnDataParallelScanState scan_state;
 
-    //! For merge operations
+    // For merge operations
     mutex glock;
 
-    //! Progress counters
+    // Progress counters
     atomic<idx_t> rows_loaded = {0};
 };
 
 unique_ptr<GlobalSinkState> PhysicalCreateRMIIndex::GetGlobalSinkState(ClientContext &context) const {
     auto gstate = make_uniq<CreateRMIIndexGlobalState>(*this);
 
-    //! Collection schema: [key, rowid]
+    // Collection schema: [key, rowid]
     vector<LogicalType> types = {
         unbound_expressions[0]->return_type,
         LogicalType::ROW_TYPE
@@ -141,7 +132,7 @@ unique_ptr<GlobalSinkState> PhysicalCreateRMIIndex::GetGlobalSinkState(ClientCon
 
     gstate->client_ctx = context.shared_from_this();
 
-    //! Create the RMI index object (unbuilt)
+    // Create the RMI index object (unbuilt)
     auto &storage = table.GetStorage();
     auto &iom = TableIOManager::Get(storage);
     auto &db = storage.db;
@@ -161,10 +152,7 @@ unique_ptr<GlobalSinkState> PhysicalCreateRMIIndex::GetGlobalSinkState(ClientCon
     return std::move(gstate);
 }
 
-//================================================================================================
 // Local Sink State
-//================================================================================================
-
 class CreateRMIIndexLocalState final : public LocalSinkState {
 public:
     unique_ptr<ColumnDataCollection> collection;
@@ -188,10 +176,7 @@ unique_ptr<LocalSinkState> PhysicalCreateRMIIndex::GetLocalSinkState(ExecutionCo
     return std::move(state);
 }
 
-//================================================================================================
 // Sink
-//================================================================================================
-
 SinkResultType PhysicalCreateRMIIndex::Sink(ExecutionContext &context,
                                             DataChunk &chunk,
                                             OperatorSinkInput &input) const {
@@ -203,10 +188,7 @@ SinkResultType PhysicalCreateRMIIndex::Sink(ExecutionContext &context,
     return SinkResultType::NEED_MORE_INPUT;
 }
 
-//================================================================================================
 // Combine
-//================================================================================================
-
 SinkCombineResultType PhysicalCreateRMIIndex::Combine(
     ExecutionContext &context,
     OperatorSinkCombineInput &input) const {
@@ -229,10 +211,7 @@ SinkCombineResultType PhysicalCreateRMIIndex::Combine(
     return SinkCombineResultType::FINISHED;
 }
 
-//================================================================================================
 // Finalize (build index + register in catalog)
-//================================================================================================
-
 SinkFinalizeType PhysicalCreateRMIIndex::Finalize(
     Pipeline &pipeline,
     Event &event,
@@ -241,17 +220,17 @@ SinkFinalizeType PhysicalCreateRMIIndex::Finalize(
 
     auto &gstate = input.global_state.Cast<CreateRMIIndexGlobalState>();
 
-    //! Prepare scanning
+    // Prepare scanning
     gstate.collection->InitializeScan(gstate.scan_state, ColumnDataScanProperties::ALLOW_ZERO_COPY);
 
-    //! Local scan chunk
+    // Local scan chunk
     DataChunk scan_chunk;
     gstate.collection->InitializeScanChunk(scan_chunk);
 
     vector<pair<double, row_t>> all_data;
     all_data.reserve(gstate.collection->Count());
 
-    //! Scan all rows (single-threaded; RMI does not need vector parallelism)
+    // Scan all rows (single-threaded; RMI does not need vector parallelism)
     ColumnDataLocalScanState local;
     while (gstate.collection->Scan(gstate.scan_state, local, scan_chunk)) {
         UnifiedVectorFormat key_v, rowid_v;
@@ -273,17 +252,13 @@ SinkFinalizeType PhysicalCreateRMIIndex::Finalize(
         }
     }
 
-    //! Sort + train
-    // std::sort(all_data.begin(), all_data.end(),
-    //           [](auto &a, auto &b) { return a.first < b.first; });
-
     gstate.global_index->training_data = all_data;
     gstate.global_index->total_rows = all_data.size();
 
-    //! Build underlying model directly from sorted data
+    // Build underlying model directly from sorted data
     gstate.global_index->Build(all_data);
 
-    //! Register in catalog
+    // Register in catalog
     auto &schema = table.schema;
     info->column_ids = storage_ids;
 
@@ -298,16 +273,13 @@ SinkFinalizeType PhysicalCreateRMIIndex::Finalize(
     duck_index.initial_index_size =
         gstate.global_index->Cast<BoundIndex>().GetInMemorySize();
 
-    //! Attach to table storage
+    // Attach to table storage
     table.GetStorage().AddIndex(std::move(gstate.global_index));
 
     return SinkFinalizeType::READY;
 }
 
-//================================================================================================
 // Progress
-//================================================================================================
-
 ProgressData PhysicalCreateRMIIndex::GetSinkProgress(
         ClientContext &context,
         GlobalSinkState &gstate_p,

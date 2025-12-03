@@ -13,13 +13,9 @@ public:
         RegisterIndex(db);
         RegisterIndexScan(loader);
         RegisterIndexPragmas(loader);
-        // RegisterMacros(loader);
         
-        // Optimizers
+        // Optimizer
         RegisterScanOptimizer(db);
-		// RegisterExprOptimizer(db);
-		// RegisterTopKOptimizer(db);
-		// RegisterJoinOptimizer(db);
     }
 
 private:
@@ -31,15 +27,10 @@ private:
 
     // Registers PRAGMA functions such as PRAGMA rmi_index_info();
     static void RegisterIndexPragmas(ExtensionLoader &loader);
-	
-    // static void RegisterMacros(ExtensionLoader &loader);
-
 
     // Optimizers
     static void RegisterScanOptimizer(DatabaseInstance &db);
-	// static void RegisterExprOptimizer(DatabaseInstance &db);
-	// static void RegisterTopKOptimizer(DatabaseInstance &db);
-	// static void RegisterJoinOptimizer(DatabaseInstance &db);
+
 };
 
 } // namespace duckdb

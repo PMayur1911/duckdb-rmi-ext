@@ -13,9 +13,9 @@ else
     exit 1
 fi
 
-# =====================================================================
+
 # BENCHMARK FUNCTION — RMI (poly model)
-# =====================================================================
+
 run_benchmark() {
     local NAME="$1"             
     local INSERT_SQL="$2"
@@ -38,9 +38,9 @@ run_benchmark() {
 
     INSERT_BLOCK=$(cat "$INSERT_SQL")
 
-    # =====================================================================
+    
     # STEP 1 — MEASURE INDEX MEMORY (base vs indexed)
-    # =====================================================================
+    
     echo "[*] Measuring RMI-poly index memory..."
 
     BASE_SQL=$(cat <<EOF
@@ -89,9 +89,9 @@ EOF
     rm -f mem_base_100k.db mem_index_100k.db base_mem.txt index_mem.txt
 
 
-    # =====================================================================
+    
     # STEP 2 — RUN 100 QUERIES (SAFE, STDIN)
-    # =====================================================================
+    
     echo "[*] Running 100 lookup queries..."
 
     idx=1
@@ -146,9 +146,9 @@ EOF
     rm -f tmp_query.sql
 
 
-    # =====================================================================
+    
     # STEP 3 — STATS
-    # =====================================================================
+    
     echo "[*] Computing statistics..."
 
     avg=$(awk '{s+=$1} END{printf "%.4f", s/NR}' "$RESULTS_FILE")
@@ -169,9 +169,9 @@ EOF
     } > "$STATS_FILE"
 
 
-    # =====================================================================
+    
     # STEP 4 — ACCURACY METRICS
-    # =====================================================================
+    
     hit_rate=$(awk -v h="$hits" 'BEGIN { printf "%.2f", h }')
     miss_rate=$(awk -v m="$misses" 'BEGIN { printf "%.2f", m }')
 
@@ -186,9 +186,9 @@ EOF
 }
 
 
-# =====================================================================
+
 # RUN ALL THREE 100K DISTRIBUTIONS
-# =====================================================================
+
 
 run_benchmark \
     "linear_100k" \

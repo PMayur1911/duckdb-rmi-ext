@@ -5,9 +5,9 @@ import seaborn as sns
 
 BASE_DIR = "outputs"
 
-# ---------------------------------------------------------
+
 # Helper function: parse stats.txt (now includes memory & build time)
-# ---------------------------------------------------------
+
 def parse_stats(file_path):
     stats = {
         "Average": None,
@@ -43,9 +43,9 @@ def parse_stats(file_path):
     return stats
 
 
-# ---------------------------------------------------------
+
 # Helper function: parse accuracy.txt
-# ---------------------------------------------------------
+
 def parse_accuracy(file_path):
     acc = {"Hits": None, "Misses": None, "HitRate": None, "MissRate": None}
     if not os.path.exists(file_path):
@@ -64,9 +64,9 @@ def parse_accuracy(file_path):
     return acc
 
 
-# ---------------------------------------------------------
+
 # Aggregate all benchmark results
-# ---------------------------------------------------------
+
 rows = []
 
 for model in os.listdir(BASE_DIR):  # art, rmi_linear, rmi_poly, ...
@@ -103,9 +103,9 @@ df.to_csv("benchmark_summary.csv", index=False)
 print("\nSaved summary to benchmark_summary.csv\n")
 
 
-# ---------------------------------------------------------
+
 # Visualization Section (latency + accuracy + memory + build time)
-# ---------------------------------------------------------
+
 sns.set(style="whitegrid")
 
 # ---- 1. Average Latency ----
@@ -141,9 +141,9 @@ plt.savefig("avg_latency_heatmap.png")
 print("Saved avg_latency_heatmap.png")
 
 
-# ---------------------------------------------------------
+
 # MEMORY PLOTS
-# ---------------------------------------------------------
+
 
 # ---- 5. Index Memory (KB) ----
 plt.figure(figsize=(12, 6))
@@ -186,9 +186,9 @@ plt.savefig("latency_vs_memory_scatter.png")
 print("Saved latency_vs_memory_scatter.png")
 
 
-# ---------------------------------------------------------
+
 # INDEX BUILD TIME PLOTS
-# ---------------------------------------------------------
+
 
 # ---- 9. Index Build Time (ms) by Model & Dataset ----
 plt.figure(figsize=(12, 6))

@@ -20,10 +20,6 @@ public:
     virtual void InsertIntoOverflow(double key, row_t row_id) = 0;
     virtual void DeleteFromOverflow(double key, row_t row_id) = 0;
 
-    // Persistence
-    // virtual void Serialize(Serializer &serializer) const = 0;
-    // virtual void Deserialize(Deserializer &deserializer) = 0;
-
     // Error bounds
     virtual int64_t GetMinError() const = 0;
     virtual int64_t GetMaxError() const = 0;

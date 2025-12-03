@@ -14,9 +14,9 @@ else
 fi
 
 
-# =====================================================================
+
 # BENCHMARK FUNCTION — SAFE EXEC + MEMORY MEASUREMENTS
-# =====================================================================
+
 run_benchmark() {
     local NAME="$1"        # linear | poly | random
     local INSERT_SQL="$2"
@@ -36,9 +36,9 @@ run_benchmark() {
 
     INSERT_BLOCK=$(cat "$INSERT_SQL")
 
-    # =====================================================================
+    
     # STEP 1 — MEMORY MEASUREMENT (base vs indexed)
-    # =====================================================================
+    
     echo "[*] Measuring ART index memory..."
 
     BASE_SQL=$(cat <<EOF
@@ -88,9 +88,9 @@ EOF
     rm -f mem_base.db mem_index.db base_mem.txt index_mem.txt
 
 
-    # =====================================================================
+    
     # STEP 2 — RUN 100 QUERIES (SAFE STDIN EXECUTION)
-    # =====================================================================
+    
     echo "[*] Running 100 lookup queries..."
 
     idx=1
@@ -143,9 +143,9 @@ EOF
     rm -f tmp_query.sql
 
 
-    # =====================================================================
+    
     # STEP 3 — STATS
-    # =====================================================================
+    
     echo "[*] Computing statistics..."
 
     awk '
@@ -169,9 +169,9 @@ EOF
     echo "Index Memory (MB): $INDEX_MEM_MB" >> "$STATS_FILE"
 
 
-    # =====================================================================
+    
     # STEP 4 — ACCURACY
-    # =====================================================================
+    
     hit_rate=$(awk -v h="$hits" 'BEGIN { printf "%.2f", (h/100)*100 }')
     miss_rate=$(awk -v m="$misses" 'BEGIN { printf "%.2f", (m/100)*100 }')
 
@@ -184,9 +184,9 @@ EOF
 }
 
 
-# =====================================================================
+
 # RUN ALL THREE ART BENCHMARKS (linear, poly, random)
-# =====================================================================
+
 run_benchmark \
     "linear" \
     "../insert/insert_data_linear.sql" \
