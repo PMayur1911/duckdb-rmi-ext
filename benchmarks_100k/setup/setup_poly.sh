@@ -4,40 +4,36 @@ set -euo pipefail
 # ---------------------------------------------------
 # CONFIG
 # ---------------------------------------------------
-N=10000
-BATCH=1000
-
-CSV_FILE="../data/data_random.csv"
-OUTPUT_SQL="../insert/insert_data_random.sql"
-QUERY_VALUES="../query/query_values_random.txt"
+N=100000                                # 100k rows
+BATCH=1000                              # rows per INSERT batch
+CSV_FILE="../data/data_poly_100k.csv"
+OUTPUT_SQL="../insert/insert_data_poly_100k.sql"
+QUERY_VALUES="../query/query_values_poly_100k.txt"
 NUM_QUERIES=100
 
-echo "[*] Generating RANDOM dataset ($N rows, values in 0–100000) into $CSV_FILE ..."
+mkdir -p ../data ../insert ../query
+
+echo "[*] Generating POLYNOMIAL dataset ($N rows, y = x^2 + 2x + 1 with x increment 0.01) into $CSV_FILE ..."
 
 # ---------------------------------------------------
-# 1) Create random CSV dataset
+# 1) Create polynomial CSV dataset
 # ---------------------------------------------------
 python3 - <<EOF
-import random
-random.seed(42)
-
 N = $N
-MIN_VAL = 0
-MAX_VAL = 100000
-
+step = 0.01
 with open("$CSV_FILE", "w") as f:
     f.write("id,value\n")
     for i in range(1, N + 1):
-        id_val = round(random.uniform(MIN_VAL, MAX_VAL), 2)
-        val_val = round(random.uniform(MIN_VAL, MAX_VAL), 2)
-        f.write(f"{id_val:.2f},{val_val:.2f}\n")
+        x = i * step          # x = 0.1, 0.2, ... up to 10000.0
+        y = x*x + 2*x + 1
+        f.write(f"{x},{y}\n")
 EOF
 
-echo "[*] CSV generation complete: $(wc -l < $CSV_FILE) lines"
+echo "[*] CSV generation complete: $(wc -l < "$CSV_FILE") lines"
 
 
 # ---------------------------------------------------
-# 2) Generate batched INSERT SQL file
+# 2) Generate batched INSERT SQL
 # ---------------------------------------------------
 echo "[*] Generating batched INSERT SQL into $OUTPUT_SQL ..."
 
@@ -47,7 +43,7 @@ touch "$OUTPUT_SQL"
 count=0
 batch_i=0
 
-tail -n +2 "$CSV_FILE" | while IFS=',' read -r id value; do
+while IFS=',' read -r id value; do
     if (( count % BATCH == 0 )); then
         if (( count > 0 )); then
             echo ";" >> "$OUTPUT_SQL"
@@ -59,9 +55,9 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r id value; do
     fi
 
     printf "(%s, %s)" "$id" "$value" >> "$OUTPUT_SQL"
-
     count=$((count + 1))
-done
+
+done < <(tail -n +2 "$CSV_FILE")
 
 echo ";" >> "$OUTPUT_SQL"
 
@@ -69,13 +65,14 @@ echo "[*] SQL generation complete with $batch_i batches: $OUTPUT_SQL"
 
 
 # ---------------------------------------------------
-# 3) Generate query values from dataset
+# 3) Select query values
 # ---------------------------------------------------
-echo "[*] Selecting $NUM_QUERIES random query lookup values into $QUERY_VALUES ..."
+echo "[*] Selecting $NUM_QUERIES query values into $QUERY_VALUES ..."
 
 tail -n +2 "$CSV_FILE" \
-    | shuf -n $NUM_QUERIES \
-    | cut -d',' -f2 > "$QUERY_VALUES"
+    | shuf -n "$NUM_QUERIES" \
+    | cut -d',' -f2 \
+    > "$QUERY_VALUES"
 
 echo "[*] Query values saved: $QUERY_VALUES"
 

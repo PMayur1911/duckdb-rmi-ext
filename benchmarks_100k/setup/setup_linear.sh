@@ -4,12 +4,12 @@ set -euo pipefail
 # ---------------------------------------------------
 # CONFIG
 # ---------------------------------------------------
-N=10000                    # total rows
-BATCH_SIZE=500             # rows per INSERT statement
-CSV_FILE="../data/data_linear.csv"
-OUTPUT_SQL="../insert/insert_data_linear.sql"
-QUERY_VALUES="../query/query_values_linear.txt"
-NUM_QUERIES=100
+N=100000                   # total rows (100k)
+BATCH_SIZE=500             # rows per INSERT batch
+CSV_FILE="../data/data_linear_100k.csv"
+OUTPUT_SQL="../insert/insert_data_linear_100k.sql"
+QUERY_VALUES="../query/query_values_linear_100k.txt"
+NUM_QUERIES=100            # point lookups
 
 mkdir -p ../data ../insert ../query
 
@@ -23,19 +23,19 @@ N = $N
 with open("$CSV_FILE", "w") as f:
     f.write("id,value\n")
     for x in range(1, N + 1):
-        f.write(f"{x:.2f},{x:.2f}\n")
+        # No floats needed for linear — faster & smaller
+        f.write(f"{x},{x}\n")
 EOF
 
-echo "[*] CSV generation complete: \$(wc -l < "$CSV_FILE") lines"
+echo "[*] CSV generation complete: $(wc -l < "$CSV_FILE") lines"
 
 
 # ---------------------------------------------------
 # 2) Generate batched INSERT SQL file
 # ---------------------------------------------------
 echo "[*] Generating batched INSERT SQL into $OUTPUT_SQL ..."
-python3 - <<EOF
-import math
 
+python3 - <<EOF
 csv_path = "$CSV_FILE"
 sql_path = "$OUTPUT_SQL"
 batch_size = $BATCH_SIZE
@@ -65,13 +65,14 @@ echo "[*] SQL generation complete: $OUTPUT_SQL"
 
 
 # ---------------------------------------------------
-# 3) Generate query_values.txt — sample 100 real values
+# 3) Generate query_values (100 real point lookups)
 # ---------------------------------------------------
 echo "[*] Selecting $NUM_QUERIES query values from dataset into $QUERY_VALUES ..."
 
 tail -n +2 "$CSV_FILE" \
     | shuf -n "$NUM_QUERIES" \
-    | cut -d',' -f2 > "$QUERY_VALUES"
+    | cut -d',' -f2 \
+    > "$QUERY_VALUES"
 
 echo "[*] Query values saved: $QUERY_VALUES"
 
