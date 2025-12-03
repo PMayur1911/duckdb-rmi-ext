@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DUCKDB="../../duckdb-rmi-ext/build/release/duckdb"
+DUCKDB="../../build/release/duckdb"
 
 # No need for /usr/bin/time here, vanilla has no index.
 # We will just record index memory as 0.
