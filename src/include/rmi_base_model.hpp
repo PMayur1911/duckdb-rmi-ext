@@ -10,6 +10,8 @@ class BaseRMIModel {
 public:
     virtual ~BaseRMIModel() = default;
 
+    string model_name;
+
     virtual void Train(const std::vector<std::pair<double, idx_t>> &data) = 0;
     virtual idx_t Predict(double key) const = 0;
     virtual std::pair<idx_t, idx_t> GetSearchBounds(double key, idx_t total_rows) const = 0;
@@ -31,6 +33,10 @@ public:
 
     // Predict position (alias for Predict)
     virtual idx_t PredictPosition(double key) const = 0;
+
+    string GetModelTypeName() const {
+        return model_name;
+    }
 
 };
 

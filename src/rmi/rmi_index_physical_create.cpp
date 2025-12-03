@@ -274,31 +274,14 @@ SinkFinalizeType PhysicalCreateRMIIndex::Finalize(
     }
 
     //! Sort + train
-    std::sort(all_data.begin(), all_data.end(),
-              [](auto &a, auto &b) { return a.first < b.first; });
+    // std::sort(all_data.begin(), all_data.end(),
+    //           [](auto &a, auto &b) { return a.first < b.first; });
 
     gstate.global_index->training_data = all_data;
     gstate.global_index->total_rows = all_data.size();
 
-    //! Build underlying model
-    {
-        Vector dummy_keys(LogicalType::DOUBLE);
-        Vector dummy_rowids(LogicalType::ROW_TYPE);
-
-        idx_t n = all_data.size();
-        dummy_keys.Initialize(n);
-        dummy_rowids.Initialize(n);
-
-        auto kptr = FlatVector::GetData<double>(dummy_keys);
-        auto rptr = FlatVector::GetData<row_t>(dummy_rowids);
-
-        for (idx_t i = 0; i < n; i++) {
-            kptr[i] = all_data[i].first;
-            rptr[i] = all_data[i].second;
-        }
-
-        gstate.global_index->Build(dummy_keys, dummy_rowids, n);
-    }
+    //! Build underlying model directly from sorted data
+    gstate.global_index->Build(all_data);
 
     //! Register in catalog
     auto &schema = table.schema;

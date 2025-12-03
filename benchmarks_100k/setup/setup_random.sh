@@ -4,15 +4,16 @@ set -euo pipefail
 # ---------------------------------------------------
 # CONFIG
 # ---------------------------------------------------
-N=10000
-BATCH=1000
-
-CSV_FILE="../data/data_random.csv"
-OUTPUT_SQL="../insert/insert_data_random.sql"
-QUERY_VALUES="../query/query_values_random.txt"
+N=100000                          # 100k rows
+BATCH_SIZE=1000                   # rows per INSERT
+CSV_FILE="../data/data_random_100k.csv"
+OUTPUT_SQL="../insert/insert_data_random_100k.sql"
+QUERY_VALUES="../query/query_values_random_100k.txt"
 NUM_QUERIES=100
 
-echo "[*] Generating RANDOM dataset ($N rows, values in 0–100000) into $CSV_FILE ..."
+mkdir -p ../data ../insert ../query
+
+echo "[*] Generating RANDOM dataset ($N rows, values ∈ [0,100000]) into $CSV_FILE ..."
 
 # ---------------------------------------------------
 # 1) Create random CSV dataset
@@ -27,13 +28,13 @@ MAX_VAL = 100000
 
 with open("$CSV_FILE", "w") as f:
     f.write("id,value\n")
-    for i in range(1, N + 1):
-        id_val = round(random.uniform(MIN_VAL, MAX_VAL), 2)
-        val_val = round(random.uniform(MIN_VAL, MAX_VAL), 2)
-        f.write(f"{id_val:.2f},{val_val:.2f}\n")
+    for _ in range(N):
+        id_val = random.uniform(MIN_VAL, MAX_VAL)
+        val_val = random.uniform(MIN_VAL, MAX_VAL)
+        f.write(f"{id_val},{val_val}\n")
 EOF
 
-echo "[*] CSV generation complete: $(wc -l < $CSV_FILE) lines"
+echo "[*] CSV generation complete: \$(wc -l < "$CSV_FILE") lines"
 
 
 # ---------------------------------------------------
@@ -47,8 +48,8 @@ touch "$OUTPUT_SQL"
 count=0
 batch_i=0
 
-tail -n +2 "$CSV_FILE" | while IFS=',' read -r id value; do
-    if (( count % BATCH == 0 )); then
+while IFS=',' read -r id value; do
+    if (( count % BATCH_SIZE == 0 )); then
         if (( count > 0 )); then
             echo ";" >> "$OUTPUT_SQL"
         fi
@@ -59,9 +60,9 @@ tail -n +2 "$CSV_FILE" | while IFS=',' read -r id value; do
     fi
 
     printf "(%s, %s)" "$id" "$value" >> "$OUTPUT_SQL"
-
     count=$((count + 1))
-done
+
+done < <(tail -n +2 "$CSV_FILE")
 
 echo ";" >> "$OUTPUT_SQL"
 
@@ -69,13 +70,14 @@ echo "[*] SQL generation complete with $batch_i batches: $OUTPUT_SQL"
 
 
 # ---------------------------------------------------
-# 3) Generate query values from dataset
+# 3) Generate query values (random sample from CSV)
 # ---------------------------------------------------
 echo "[*] Selecting $NUM_QUERIES random query lookup values into $QUERY_VALUES ..."
 
 tail -n +2 "$CSV_FILE" \
-    | shuf -n $NUM_QUERIES \
-    | cut -d',' -f2 > "$QUERY_VALUES"
+    | shuf -n "$NUM_QUERIES" \
+    | cut -d',' -f2 \
+    > "$QUERY_VALUES"
 
 echo "[*] Query values saved: $QUERY_VALUES"
 
@@ -84,6 +86,6 @@ echo "[*] Query values saved: $QUERY_VALUES"
 # DONE
 # ---------------------------------------------------
 echo "[*] ALL DONE — generated:"
-echo "    - $CSV_FILE"
-echo "    - $OUTPUT_SQL"
-echo "    - $QUERY_VALUES"
+echo "    • $CSV_FILE"
+echo "    • $OUTPUT_SQL"
+echo "    • $QUERY_VALUES"

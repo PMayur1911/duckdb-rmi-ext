@@ -1,5 +1,8 @@
 #include "rmi_linear_model.hpp"
 
+#include <fstream>
+#include <sstream>
+
 namespace duckdb {
 
 RMILinearModel::RMILinearModel()
@@ -7,66 +10,89 @@ RMILinearModel::RMILinearModel()
       intercept(0.0),
       min_error(std::numeric_limits<int64_t>::max()),
       max_error(std::numeric_limits<int64_t>::min()) {
-        // Constructor body (empty for now)
+        model_name = "RMILinearModel";
 }
 
 RMILinearModel::~RMILinearModel() {
     // Destructor body (empty for now)
 }
 
+static void RMILog(const std::string &msg) {
+    std::ofstream log("/tmp/rmi_model.log", std::ios::app);
+    if (log.is_open()) {
+        log << msg << std::endl;
+        log.close();
+    }
+}
+
 void RMILinearModel::Train(const std::vector<std::pair<double, idx_t>> &data) {
-    
     const idx_t n = data.size();
-    
+
+    // int i = 0;
+    // RMILog("[MODEL] Printing the Training_data:\n");
+    // for (auto it = data.begin(); it != data.end(); it++) {
+    //     RMILog("\t[MODEL]{ " + std::to_string(it->first) + ", " + std::to_string(it->second) + "}");
+    //     i++;
+    //     if (i > 100) {
+    //         break;
+    //     }
+    // }
+    // RMILog("[MDOEL]End of Training_data\n");
+
     if (n == 0) {
-        slope = 0.0;
-        intercept = 0.0;
+        slope = 0;
+        intercept = 0;
         min_error = 0;
         max_error = 0;
         return;
     }
 
-    long double sum_x = 0.0;
-    long double sum_y = 0.0;
-    long double sum_xy = 0.0;
-    long double sum_x2 = 0.0;
+    long double mean_x = 0, mean_y = 0;
 
-    // Compute regression stats
-    for (const auto &p : data) {
-        const double x = p.first;
-        const long double y = static_cast<long double>(p.second);
-
-        sum_x += x;
-        sum_y += y;
-        sum_xy += (x * y);
-        sum_x2 += (x * x);
+    for (auto &p : data) {
+        mean_x += p.first;
+        mean_y += p.second;
     }
 
-    long double denom = (n * sum_x2 - sum_x * sum_x);
-    if (denom == 0) {
-        // Base case: column has constant values
-        slope = 0.0;
-        intercept = static_cast<double>(data[0].second);
+    mean_x /= n;
+    mean_y /= n;
+
+    long double num = 0, den = 0;
+
+    for (auto &p : data) {
+        long double dx = p.first - mean_x;
+        long double dy = (long double)p.second - mean_y;
+        num += dx * dy;
+        den += dx * dx;
+    }
+
+    if (den == 0) {
+        slope = 0;
+        intercept = mean_y;
     } else {
-        slope = static_cast<double>((n * sum_xy - sum_x * sum_y) / denom);
-        intercept = static_cast<double>((sum_y - slope * sum_x) / n);
+        slope = (double)(num / den);
+        intercept = (double)(mean_y - slope * mean_x);
     }
 
-    // Compute error bounds
+    // === Error Bounds ===
     min_error = std::numeric_limits<int64_t>::max();
     max_error = std::numeric_limits<int64_t>::min();
 
-    for (const auto &p : data) {
-        const double key = p.first;
-        const idx_t true_pos = p.second;
+    for (auto &p : data) {
+        long double pred = slope * p.first + intercept;
+        int64_t err = (int64_t)p.second - (int64_t)pred;
 
-        const idx_t pred = Predict(key);
-        const int64_t error = static_cast<int64_t>(true_pos) - static_cast<int64_t>(pred);
-
-        if (error < min_error) min_error = error;
-        if (error > max_error) max_error = error;
+        min_error = std::min(min_error, err);
+        max_error = std::max(max_error, err);
     }
+
+    // RMILog("Trained StableLinearModel: slope=" + std::to_string(slope) +
+    //        ", intercept=" + std::to_string(intercept) +
+    //        ", min_error=" + std::to_string(min_error) +
+    //        ", max_error=" + std::to_string(max_error) +
+    //         ", number_of_items=" + std::to_string(n));
 }
+
 
 idx_t RMILinearModel::Predict(double key) const {
     long double predicted = slope * key + intercept;

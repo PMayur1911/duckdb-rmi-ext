@@ -1,6 +1,11 @@
 #include "rmi_module.hpp"
 #include "rmi_index.hpp"
 
+#include "rmi_base_model.hpp"
+#include "rmi_linear_model.hpp"
+#include "rmi_poly_model.hpp"
+#include "rmi_two_layer_model.hpp"
+
 #include "duckdb/catalog/catalog_entry/duck_index_entry.hpp"
 #include "duckdb/catalog/catalog_entry/duck_table_entry.hpp"
 #include "duckdb/catalog/dependency_list.hpp"
@@ -13,11 +18,22 @@
 #include "duckdb/transaction/duck_transaction.hpp"
 #include "duckdb/transaction/local_storage.hpp"
 
+#include <fstream>
+#include <sstream>
+
 namespace duckdb {
 
 //-------------------------------------------------------------------------
 // 1. RMI Index INFO (Lists all RMI indexes)
 //-------------------------------------------------------------------------
+
+static void RMILog(const std::string &msg) {
+    std::ofstream log("/tmp/rmi_model.log", std::ios::app);
+    if (log.is_open()) {
+        log << msg << std::endl;
+        log.close();
+    }
+}
 
 // BIND
 static unique_ptr<FunctionData> RMIIndexInfoBind(ClientContext &context, TableFunctionBindInput &input,
@@ -411,6 +427,113 @@ static void RMIIndexOverflowExecute(ClientContext &context, TableFunctionInput &
     output.SetCardinality(output_count);
 }
 
+struct RMIIndexModelInfoBindData final : public TableFunctionData {
+    string index_name;
+};
+
+static unique_ptr<FunctionData> RMIIndexModelInfoBind(
+    ClientContext &context, TableFunctionBindInput &input,
+    vector<LogicalType> &return_types, vector<string> &names) {
+
+    auto result = make_uniq<RMIIndexModelInfoBindData>();
+    result->index_name = input.inputs[0].GetValue<string>();
+
+    names.emplace_back("field");
+    return_types.emplace_back(LogicalType::VARCHAR);
+
+    names.emplace_back("value");
+    return_types.emplace_back(LogicalType::VARCHAR);
+
+    return std::move(result);
+}
+
+struct RMIIndexModelInfoState final : public GlobalTableFunctionState {
+    const RMIIndex &index;
+    bool emitted = false;
+
+    explicit RMIIndexModelInfoState(const RMIIndex &idx) : index(idx) {
+    }
+};
+
+static unique_ptr<GlobalTableFunctionState> RMIIndexModelInfoInit(
+    ClientContext &context, TableFunctionInitInput &input) {
+
+    auto &bind = input.bind_data->Cast<RMIIndexModelInfoBindData>();
+
+    auto rmi_index = TryGetIndex(context, bind.index_name);
+    if (!rmi_index) {
+        throw BinderException("Index %s not found", bind.index_name);
+    }
+
+    return make_uniq<RMIIndexModelInfoState>(*rmi_index);
+}
+
+static void EmitKV(DataChunk &chunk, idx_t row,
+                   const string &field, const string &value) {
+
+    chunk.SetCardinality(row + 1);
+
+    auto &col0 = chunk.data[0];
+    auto &col1 = chunk.data[1];
+
+    FlatVector::GetData<string_t>(col0)[row] =
+        StringVector::AddString(col0, field);
+
+    FlatVector::GetData<string_t>(col1)[row] =
+        StringVector::AddString(col1, value);
+}
+
+static void RMIIndexModelInfoExecute(
+    ClientContext &context, TableFunctionInput &data_p, DataChunk &output) {
+
+    auto &state = data_p.global_state->Cast<RMIIndexModelInfoState>();
+    if (state.emitted) {
+        output.SetCardinality(0);
+        return;
+    }
+
+    auto &model = *state.index.model;
+
+    idx_t row = 0;
+
+    // Model type
+    EmitKV(output, row++, "model_type", model.GetModelTypeName());
+
+    // General fields
+    EmitKV(output, row++, "min_error", to_string(model.GetMinError()));
+    EmitKV(output, row++, "max_error", to_string(model.GetMaxError()));
+    EmitKV(output, row++, "overflow_key_count",
+           to_string(model.GetOverflowMap().size()));
+
+    // Now detect model kind
+    if (auto *lin = dynamic_cast<RMILinearModel*>(&model)) {
+        EmitKV(output, row++, "slope", to_string(lin->slope));
+        EmitKV(output, row++, "intercept", to_string(lin->intercept));
+    }
+    else if (auto *poly = dynamic_cast<RMIPolyModel*>(&model)) {
+        EmitKV(output, row++, "degree", to_string(poly->coeffs.size() - 1));
+        for (idx_t i = 0; i < poly->coeffs.size(); i++) {
+            EmitKV(output, row++, "coeff[" + to_string(i) + "]",
+                   to_string(poly->coeffs[i]));
+        }
+    }
+    else if (auto *two = dynamic_cast<RMITwoLayerModel*>(&model)) {
+        EmitKV(output, row++, "root_slope", to_string(two->root_slope));
+        EmitKV(output, row++, "root_intercept", to_string(two->root_intercept));
+        EmitKV(output, row++, "segments(K)", to_string(two->K));
+
+        for (idx_t i = 0; i < two->K; i++) {
+            EmitKV(output, row++, "leaf_slope[" + to_string(i) + "]",
+                   to_string(two->leaf_slopes[i]));
+            EmitKV(output, row++, "leaf_intercept[" + to_string(i) + "]",
+                   to_string(two->leaf_intercepts[i]));
+        }
+    }
+
+    state.emitted = true;
+}
+
+
 void RMIModule::RegisterIndexPragmas(ExtensionLoader &loader) {
 
     // Register: pragma_rmi_index_info()
@@ -432,6 +555,10 @@ void RMIModule::RegisterIndexPragmas(ExtensionLoader &loader) {
     TableFunction overflow_function("rmi_index_overflow", {LogicalType::VARCHAR}, RMIIndexOverflowExecute,
                                     RMIIndexOverflowBind, RMIIndexOverflowInit);
     loader.RegisterFunction(overflow_function);
+
+    TableFunction model_info_fn("rmi_index_model_info", {LogicalType::VARCHAR}, RMIIndexModelInfoExecute, RMIIndexModelInfoBind, RMIIndexModelInfoInit);
+    loader.RegisterFunction(model_info_fn);
+
 }
 
 } // namespace duckdb

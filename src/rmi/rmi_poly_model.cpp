@@ -8,7 +8,9 @@ namespace duckdb {
 RMIPolyModel::RMIPolyModel()
     : max_degree(6),
       min_error(std::numeric_limits<int64_t>::max()),
-      max_error(std::numeric_limits<int64_t>::min()) {}
+      max_error(std::numeric_limits<int64_t>::min()) {
+    model_name = "RMIPolyModel";
+}
 
 RMIPolyModel::~RMIPolyModel() {}
 

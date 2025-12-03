@@ -1,4 +1,0 @@
-Hits: 100
-Misses: 0
-Hit Rate (%): 100.00
-Miss Rate (%): 0.00
