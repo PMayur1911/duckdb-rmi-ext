@@ -6,9 +6,9 @@ DUCKDB="../../build/release/duckdb"
 # No need for /usr/bin/time here, vanilla has no index.
 # We will just record index memory as 0.
 
-# =====================================================================
+
 # BENCHMARK FUNCTION — VANILLA SCAN (NO INDEX)
-# =====================================================================
+
 run_benchmark() {
     local NAME="$1"             # linear | poly | random
     local INSERT_SQL="$2"
@@ -38,9 +38,9 @@ run_benchmark() {
     echo "Index Memory (KB): $INDEX_MEM_KB" > "$MEM_FILE"
     echo "Index Memory (MB): $INDEX_MEM_MB" >> "$MEM_FILE"
 
-    # =====================================================================
+    
     # STEP 1 — RUN 100 QUERIES (NO INDEX)
-    # =====================================================================
+    
     echo "[*] Running 100 lookup queries (no index)..."
 
     idx=1
@@ -90,9 +90,9 @@ EOF
 
     rm -f tmp_query.sql
 
-    # =====================================================================
+    
     # STEP 2 — STATS
-    # =====================================================================
+    
     echo "[*] Computing statistics..."
 
     awk '
@@ -115,9 +115,9 @@ EOF
     echo "Index Memory (KB): $INDEX_MEM_KB" >> "$STATS_FILE"
     echo "Index Memory (MB): $INDEX_MEM_MB" >> "$STATS_FILE"
 
-    # =====================================================================
+    
     # STEP 3 — ACCURACY
-    # =====================================================================
+    
     hit_rate=$(awk -v h="$hits" 'BEGIN { printf "%.2f", (h/100)*100 }')
     miss_rate=$(awk -v m="$misses" 'BEGIN { printf "%.2f", (m/100)*100 }')
 
@@ -129,9 +129,9 @@ EOF
     echo "[*] Completed VANILLA benchmark for $NAME"
 }
 
-# =====================================================================
+
 # RUN ALL THREE DISTRIBUTIONS
-# =====================================================================
+
 run_benchmark \
     "linear" \
     "../insert/insert_data_linear.sql" \

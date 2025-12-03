@@ -14,9 +14,9 @@ else
 fi
 
 
-# =====================================================================
+
 # BENCHMARK FUNCTION — MEMORY MEASUREMENT + SAFE QUERY EXECUTION
-# =====================================================================
+
 run_benchmark() {
     local NAME="$1"             # linear | poly | random
     local INSERT_SQL="$2"
@@ -39,9 +39,9 @@ run_benchmark() {
 
     INSERT_BLOCK=$(cat "$INSERT_SQL")
 
-    # =====================================================================
+    
     # STEP 1 — MEASURE INDEX MEMORY
-    # =====================================================================
+    
     echo "[*] Measuring RMI-linear index memory..."
 
     BASE_SQL=$(cat <<EOF
@@ -91,9 +91,9 @@ EOF
 
     rm -f mem_base.db mem_index.db base_mem.txt index_mem.txt
 
-    # =====================================================================
+    
     # STEP 2 — RUN 100 TIMED QUERIES
-    # =====================================================================
+    
     echo "[*] Running 100 lookup queries..."
 
     idx=1
@@ -148,9 +148,9 @@ EOF
 
     rm -f tmp_query.sql
 
-    # =====================================================================
+    
     # STEP 3 — STATS
-    # =====================================================================
+    
     echo "[*] Computing statistics..."
 
     awk '
@@ -173,9 +173,9 @@ EOF
     echo "Index Memory (KB): $INDEX_MEM_KB" >> "$STATS_FILE"
     echo "Index Memory (MB): $INDEX_MEM_MB" >> "$STATS_FILE"
 
-    # =====================================================================
+    
     # STEP 4 — ACCURACY
-    # =====================================================================
+    
     hit_rate=$(awk -v h="$hits" 'BEGIN { printf "%.2f", (h/100)*100 }')
     miss_rate=$(awk -v m="$misses" 'BEGIN { printf "%.2f", (m/100)*100 }')
 
@@ -189,9 +189,9 @@ EOF
 }
 
 
-# =====================================================================
+
 # RUN ALL THREE DISTRIBUTIONS (linear, poly, random)
-# =====================================================================
+
 
 run_benchmark \
     "linear" \

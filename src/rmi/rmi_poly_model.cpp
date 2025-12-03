@@ -14,13 +14,8 @@ RMIPolyModel::RMIPolyModel()
 
 RMIPolyModel::~RMIPolyModel() {}
 
-// ---------------------------------------------------------------------------
-// Gaussian elimination to solve Ax = b
-// ---------------------------------------------------------------------------
-bool RMIPolyModel::SolveLinearSystem(std::vector<std::vector<double>> &A,
-                                     std::vector<double> &b,
-                                     std::vector<double> &x_out) const {
 
+bool RMIPolyModel::SolveLinearSystem(std::vector<std::vector<double>> &A, std::vector<double> &b, std::vector<double> &x_out) const {
     size_t n = A.size();
     x_out.assign(n, 0.0);
 
@@ -65,12 +60,8 @@ bool RMIPolyModel::SolveLinearSystem(std::vector<std::vector<double>> &A,
     return true;
 }
 
-// ---------------------------------------------------------------------------
 // Fit best polynomial (degree 1..max_degree), choose smallest MSE
-// ---------------------------------------------------------------------------
-std::vector<double> RMIPolyModel::FitBestPolynomial(const std::vector<double> &x,
-                                                    const std::vector<double> &y,
-                                                    int max_degree) const {
+std::vector<double> RMIPolyModel::FitBestPolynomial(const std::vector<double> &x, const std::vector<double> &y, int max_degree) const {
     size_t n = x.size();
     std::vector<double> best = {0.0, 1.0};
     double best_mse = std::numeric_limits<double>::infinity();
@@ -113,9 +104,6 @@ std::vector<double> RMIPolyModel::FitBestPolynomial(const std::vector<double> &x
     return best;
 }
 
-// ---------------------------------------------------------------------------
-// Polynomial evaluation
-// ---------------------------------------------------------------------------
 double RMIPolyModel::EvalPolynomial(const std::vector<double> &coeffs,
                                     double x) const {
     double r = 0.0;
@@ -124,9 +112,7 @@ double RMIPolyModel::EvalPolynomial(const std::vector<double> &coeffs,
     return r;
 }
 
-// ---------------------------------------------------------------------------
 // Train Model
-// ---------------------------------------------------------------------------
 void RMIPolyModel::Train(const std::vector<std::pair<double, idx_t>> &data) {
 
     const idx_t n = data.size();
@@ -158,18 +144,13 @@ void RMIPolyModel::Train(const std::vector<std::pair<double, idx_t>> &data) {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Predict
-// ---------------------------------------------------------------------------
 idx_t RMIPolyModel::Predict(double key) const {
     double p = EvalPolynomial(coeffs, key);
     if (p < 0) return 0;
     return idx_t(p);
 }
 
-// ---------------------------------------------------------------------------
 // Search Bounds
-// ---------------------------------------------------------------------------
 std::pair<idx_t, idx_t> RMIPolyModel::GetSearchBounds(double key,
                                                       idx_t total_rows) const {
     idx_t predicted = Predict(key);
@@ -188,9 +169,7 @@ std::pair<idx_t, idx_t> RMIPolyModel::GetSearchBounds(double key,
     return {idx_t(lo), idx_t(hi)};
 }
 
-// ---------------------------------------------------------------------------
 // Overflow Handling
-// ---------------------------------------------------------------------------
 void RMIPolyModel::InsertIntoOverflow(double key, row_t row_id) {
     overflow_index[key].push_back(row_id);
 }

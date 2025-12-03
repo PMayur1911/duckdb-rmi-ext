@@ -21,21 +21,19 @@ public:
                            vector<unique_ptr<Expression>> unbound_expressions,
                            idx_t estimated_cardinality);
 
-    // --- Index metadata ---
-    //! The table for which we are creating the index
+    // The table for which we are creating the index
     DuckTableEntry &table;
 
-    //! Column IDs for index storage
+    // Column IDs for index storage
     vector<column_t> storage_ids;
 
-    //! Copy of CreateIndexInfo (ownership moved here)
+    // Copy of CreateIndexInfo (ownership moved here)
     unique_ptr<CreateIndexInfo> info;
 
-    //! Unbound expressions (for optimizer)
+    // Unbound expressions (for optimizer)
     vector<unique_ptr<Expression>> unbound_expressions;
 
 public:
-    // --------- Source interface (NOOP: index creation is a sink operator) ---------
     bool IsSource() const override { return true; }
 
     SourceResultType GetData(ExecutionContext &context,
@@ -49,7 +47,6 @@ public:
     }
 
 public:
-    // --------- Sink interface (actual index construction happens here) ---------
     bool IsSink() const override { return true; }
 
     bool ParallelSink() const override { return true; }
@@ -69,7 +66,6 @@ public:
                               ClientContext &context,
                               OperatorSinkFinalizeInput &input) const override;
 
-    // --------- Progress ---------
     ProgressData GetSinkProgress(ClientContext &context,
                                  GlobalSinkState &gstate,
                                  ProgressData source_progress) const override;

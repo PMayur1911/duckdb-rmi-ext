@@ -35,9 +35,6 @@ public:
     // Return pointer to overflow row ids vector for `key`, or nullptr if not present
     const std::vector<row_t> *GetOverflowRowIDs(double key) const;
 
-    // void Serialize(Serializer &serializer) const override;
-    // void Deserialize(Deserializer &deserializer) override;
-
     int64_t GetMinError() const override { return min_error; }
     int64_t GetMaxError() const override { return max_error; }
 

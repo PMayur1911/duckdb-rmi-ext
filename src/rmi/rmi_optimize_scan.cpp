@@ -16,9 +16,7 @@
 
 namespace duckdb {
 
-//-----------------------------------------------------------------------------
 // Logger
-//-----------------------------------------------------------------------------
 static void RMILog(const std::string &msg) {
     std::ofstream log("/tmp/rmi_optimizer.log", std::ios::app);
     if (log.is_open()) {
@@ -59,21 +57,19 @@ public:
         auto &op = *plan;
 
         if (op.type != LogicalOperatorType::LOGICAL_GET) {
-            // Too noisy to log every non-GET operator usually, but here is the logic:
-            // RMILog("TryOptimize: Operator is not LOGICAL_GET. Type: " + std::to_string((int)op.type));
             return false;
         }
 
         RMILog("TryOptimize: Found LOGICAL_GET. Checking details...");
         auto &get = op.Cast<LogicalGet>();
 
-        // 1. Check if this is a standard table scan
+        // Check if this is a standard table scan
         if (get.function.name != "seq_scan") {
             RMILog("TryOptimize: Not seq_scan, function is: " + get.function.name);
             return false;
         }
 
-        // 2. Check if the table is a DuckDB table
+        // Check if the table is a DuckDB table
         auto &table = *get.GetTable();
         if (!table.IsDuckTable()) {
             RMILog("TryOptimize: Not a DuckTable.");
@@ -83,7 +79,7 @@ public:
         auto &duck_table = table.Cast<DuckTableEntry>();
         auto &table_info = *table.GetStorage().GetDataTableInfo();
 
-        // 3. Check if we have filters pushed down into this scan
+        // Check if we have filters pushed down into this scan
         if (get.table_filters.filters.empty()) {
             RMILog("TryOptimize: No table_filters pushed down to scan. RMI requires filters.");
             return false; 
@@ -93,7 +89,7 @@ public:
 
         RMILog("TryOptimize: Scanning indexes on table...");
         
-        // 4. Look for an RMI Index on the table
+        // Look for an RMI Index on the table
         table_info.BindIndexes(context, RMIIndex::TYPE_NAME);
         
         table_info.GetIndexes().Scan([&](Index &index) {
@@ -101,7 +97,6 @@ public:
                 return false;
             }
             if (RMIIndex::TYPE_NAME != index.GetIndexType()) {
-                // RMILog("TryOptimize: Index found but not RMI. Type: " + index.GetIndexType());
                 return false;
             }
 
@@ -118,7 +113,7 @@ public:
             idx_t indexed_col_idx = column_ids[0];
             RMILog("TryOptimize: RMI Index is on column ID: " + std::to_string(indexed_col_idx));
 
-            // 5. Check if the pushed-down filters apply to our indexed column
+            // Check if the pushed-down filters apply to our indexed column
             auto entry = get.table_filters.filters.find(indexed_col_idx);
             if (entry == get.table_filters.filters.end()) {
                 RMILog("TryOptimize: Filters exist, but NOT on the indexed column.");
@@ -132,7 +127,7 @@ public:
             
             auto &filter = *entry->second;
 
-            // 6. Extract filter logic into bind_data
+            // Extract filter logic into bind_data
             if (filter.filter_type == TableFilterType::CONJUNCTION_AND) {
                 RMILog("TryOptimize: Filter is CONJUNCTION_AND (Range).");
                 auto &and_filter = filter.Cast<ConjunctionAndFilter>();
@@ -144,14 +139,14 @@ public:
                 MapFilterToBindData(filter, *bind_data);
             }
             
-            // Validate: Ensure we actually extracted something
+            // Validate to ensure we actually extracted something
             if (bind_data->values[0].IsNull()) {
                 RMILog("TryOptimize: Failed to extract valid constants from filter.");
                 bind_data = nullptr; 
                 return false;
             }
 
-            return true; // Stop scanning indexes, we found one
+            return true; // Stop scanning indexes
         });
 
         if (!bind_data) {
@@ -159,7 +154,7 @@ public:
             return false;
         }
 
-        // 7. Sort the bind data (Safety step)
+        // Sort the bind data
         if (!bind_data->values[1].IsNull()) {
              if (bind_data->values[0] > bind_data->values[1]) {
                  RMILog("TryOptimize: Swapping values to ensure Slot 0 is Lower Bound.");
@@ -168,13 +163,9 @@ public:
              }
         }
 
-        // 8. Replace the Scan Function
-        RMILog("TryOptimize: SUCCESS. Replacing seq_scan with RMIIndexScanFunction.");
-        
+        // Replace the Scan Function
         get.function = RMIIndexScanFunction::GetFunction(); 
         get.bind_data = std::move(bind_data);
-        
-        // Note: We intentionally keep get.table_filters for double-checking results
 
         return true;
     }

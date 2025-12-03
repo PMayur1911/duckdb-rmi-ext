@@ -3,9 +3,8 @@ set -euo pipefail
 
 DUCKDB="../../build/release/duckdb"
 
-# ---------------------------------------------------------
+
 # Detect /usr/bin/time
-# ---------------------------------------------------------
 if command -v /usr/bin/time >/dev/null 2>&1; then
     TIME_BIN="/usr/bin/time"
 elif command -v time >/dev/null 2>&1; then
@@ -16,9 +15,8 @@ else
 fi
 
 
-# ---------------------------------------------------------
+
 # BENCHMARK FUNCTION (RUNS 100 QUERIES)
-# ---------------------------------------------------------
 run_benchmark() {
     local NAME="$1"             # linear | poly | random
     local INSERT_SQL="$2"
@@ -38,9 +36,7 @@ run_benchmark() {
     INSERT_BLOCK=$(cat "$INSERT_SQL")
 
 
-    # =====================================================================
     # 1. ONE-TIME MEMORY + INDEX BUILD TIME MEASUREMENT
-    # =====================================================================
     echo "[*] Measuring ART index memory + build time..."
 
     BASE_SQL=$(cat <<EOF
@@ -92,9 +88,7 @@ EOF
     rm -f mem_base.db mem_index.db base_mem.txt index_mem.txt
 
 
-    # =====================================================================
     # 2. RUN 100 QUERIES
-    # =====================================================================
     idx=1
     hits=0
     misses=0
@@ -134,9 +128,7 @@ EOF
     done < "$QUERY_VALUES"
 
 
-    # =====================================================================
     # 3. WRITE STATS FILE
-    # =====================================================================
     echo "[*] Computing stats for $NAME..."
 
     avg=$(awk '{s+=$1} END{print s/NR}' "$RESULTS_FILE")
@@ -158,9 +150,8 @@ EOF
     } > "$STATS_FILE"
 
 
-    # =====================================================================
+    
     # 4. WRITE ACCURACY FILE
-    # =====================================================================
     hit_rate=$(awk -v h="$hits" 'BEGIN{ printf "%.2f", (h/100)*100 }')
     miss_rate=$(awk -v m="$misses" 'BEGIN{ printf "%.2f", (m/100)*100 }')
 
@@ -175,9 +166,9 @@ EOF
 }
 
 
-# ---------------------------------------------------------
+
 # RUN ONE BENCHMARK ONLY (as requested)
-# ---------------------------------------------------------
+
 run_benchmark \
     "linear" \
     "../insert/insert_data_linear.sql" \

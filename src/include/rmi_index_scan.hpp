@@ -20,18 +20,18 @@ struct RMIIndexScanBindData final : public TableFunctionData {
         expressions[1] = ExpressionType::INVALID;
     }
 
-    //! The table to scan
+    // The table to scan
     DuckTableEntry &table;
 
-    //! The index to use
+    // The index to use
     Index &index;
 
-    //! The Predicates to scan.
-    //! Index 0: Low bound or Equality value
-    //! Index 1: High bound (for range/between)
+    // The Predicates to scan.
+    // Index 0: Low bound or Equality value
+    // Index 1: High bound (for range/between)
     Value values[2];
 
-    //! The comparison types (e.g., EQUAL, GREATERTHAN, etc.)
+    // The comparison types (e.g., EQUAL, GREATERTHAN, etc.)
     ExpressionType expressions[2];
 
 public:

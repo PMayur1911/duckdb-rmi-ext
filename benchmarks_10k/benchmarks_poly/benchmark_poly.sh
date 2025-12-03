@@ -13,9 +13,9 @@ else
     exit 1
 fi
 
-# =====================================================================
+
 # BENCHMARK FUNCTION — RMI (poly model)
-# =====================================================================
+
 run_benchmark() {
     local NAME="$1"             # linear | poly | random
     local INSERT_SQL="$2"
@@ -38,9 +38,9 @@ run_benchmark() {
 
     INSERT_BLOCK=$(cat "$INSERT_SQL")
 
-    # =====================================================================
+    
     # STEP 1 — MEASURE INDEX MEMORY (base vs indexed)
-    # =====================================================================
+    
     echo "[*] Measuring RMI-poly index memory..."
 
     BASE_SQL=$(cat <<EOF
@@ -90,9 +90,9 @@ EOF
 
     rm -f mem_base.db mem_index.db base_mem.txt index_mem.txt
 
-    # =====================================================================
+    
     # STEP 2 — RUN 100 QUERIES (SAFE, STDIN)
-    # =====================================================================
+    
     echo "[*] Running 100 lookup queries..."
 
     idx=1
@@ -146,9 +146,9 @@ EOF
 
     rm -f tmp_query.sql
 
-    # =====================================================================
+    
     # STEP 3 — STATS
-    # =====================================================================
+    
     echo "[*] Computing statistics..."
 
     awk '
@@ -171,9 +171,9 @@ EOF
     echo "Index Memory (KB): $INDEX_MEM_KB" >> "$STATS_FILE"
     echo "Index Memory (MB): $INDEX_MEM_MB" >> "$STATS_FILE"
 
-    # =====================================================================
+    
     # STEP 4 — ACCURACY
-    # =====================================================================
+    
     hit_rate=$(awk -v h="$hits" 'BEGIN { printf "%.2f", (h/100)*100 }')
     miss_rate=$(awk -v m="$misses" 'BEGIN { printf "%.2f", (m/100)*100 }')
 
@@ -185,9 +185,9 @@ EOF
     echo "[*] Completed RMI-poly benchmark for $NAME"
 }
 
-# =====================================================================
+
 # RUN ALL THREE DISTRIBUTIONS
-# =====================================================================
+
 run_benchmark \
     "linear" \
     "../insert/insert_data_linear.sql" \

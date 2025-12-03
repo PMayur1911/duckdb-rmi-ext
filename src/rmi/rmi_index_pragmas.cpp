@@ -23,10 +23,7 @@
 
 namespace duckdb {
 
-//-------------------------------------------------------------------------
-// 1. RMI Index INFO (Lists all RMI indexes)
-//-------------------------------------------------------------------------
-
+// RMI Index INFO (Lists all RMI indexes)
 static void RMILog(const std::string &msg) {
     std::ofstream log("/tmp/rmi_model.log", std::ios::app);
     if (log.is_open()) {
@@ -88,16 +85,15 @@ static void RMIIndexInfoExecute(ClientContext &context, TableFunctionInput &data
         auto &table_entry = index_entry.schema.catalog.GetEntry<TableCatalogEntry>(context, index_entry.GetSchemaName(),
                                                                                    index_entry.GetTableName());
         
-        // --- ADDED: Physical Existence Check ---
         auto &storage = table_entry.GetStorage();
         RMIIndex *rmi_index = nullptr;
 
         auto &table_info = *storage.GetDataTableInfo();
         
-        // 1. Force the system to load/bind indexes for this table
+        // Force the system to load/bind indexes for this table
         table_info.BindIndexes(context, RMIIndex::TYPE_NAME);
         
-        // 2. Scan memory to find the physical index object
+        // Scan memory to find the physical index object
         table_info.GetIndexes().Scan([&](Index &index) {
             // Skip unbound or non-RMI indexes
             if (!index.IsBound() || RMIIndex::TYPE_NAME != index.GetIndexType()) {
@@ -112,7 +108,7 @@ static void RMIIndexInfoExecute(ClientContext &context, TableFunctionInput &data
             return false;
         });
 
-        // 3. Validation: If Catalog has it, but Storage doesn't -> CRASH/ERROR
+        // Validation: If Catalog has it, but Storage doesn't -> CRASH/ERROR
         if (!rmi_index) {
             throw BinderException("Index %s present in catalog but not found in physical storage", index_entry.name);
         }
@@ -130,9 +126,6 @@ static void RMIIndexInfoExecute(ClientContext &context, TableFunctionInput &data
     output.SetCardinality(row);
 }
 
-//-------------------------------------------------------------------------
-// Helper: Get RMI Index Instance
-//-------------------------------------------------------------------------
 static optional_ptr<RMIIndex> TryGetIndex(ClientContext &context, const string &index_name) {
     auto qname = QualifiedName::Parse(index_name);
 
@@ -167,10 +160,6 @@ static optional_ptr<RMIIndex> TryGetIndex(ClientContext &context, const string &
     return rmi_index;
 }
 
-//-------------------------------------------------------------------------
-// 2. RMI Index DUMP (Dumps the internal keys/row_ids)
-//-------------------------------------------------------------------------
-
 // BIND
 struct RMIIndexDumpBindData final : public TableFunctionData {
     string index_name;
@@ -182,7 +171,6 @@ static unique_ptr<FunctionData> RMIIndexDumpBind(ClientContext &context, TableFu
 
     result->index_name = input.inputs[0].GetValue<string>();
 
-    // Return types: We return the Key and the RowID
     names.emplace_back("key");
     return_types.emplace_back(LogicalType::DOUBLE);
 
@@ -241,10 +229,6 @@ static void RMIIndexDumpExecute(ClientContext &context, TableFunctionInput &data
 
     output.SetCardinality(output_count);
 }
-
-//-------------------------------------------------------------------------
-// 3. RMI Index MODEL STATS (Shows key, row_id, and model predictions)
-//-------------------------------------------------------------------------
 
 // BIND
 struct RMIIndexModelStatsBindData final : public TableFunctionData {
@@ -334,10 +318,6 @@ static void RMIIndexModelStatsExecute(ClientContext &context, TableFunctionInput
 
     output.SetCardinality(output_count);
 }
-
-//-------------------------------------------------------------------------
-// 4. RMI Index OVERFLOW (Shows overflow entries)
-//-------------------------------------------------------------------------
 
 // BIND
 struct RMIIndexOverflowBindData final : public TableFunctionData {
@@ -556,6 +536,7 @@ void RMIModule::RegisterIndexPragmas(ExtensionLoader &loader) {
                                     RMIIndexOverflowBind, RMIIndexOverflowInit);
     loader.RegisterFunction(overflow_function);
 
+    // Resgister: rmi_index_model_info('index_name')
     TableFunction model_info_fn("rmi_index_model_info", {LogicalType::VARCHAR}, RMIIndexModelInfoExecute, RMIIndexModelInfoBind, RMIIndexModelInfoInit);
     loader.RegisterFunction(model_info_fn);
 
