@@ -24,10 +24,9 @@ static void RMILog(const std::string &msg) {
     }
 }
     
-// Helper: Extract numeric value from UnifiedVectorFormat and convert to double
 static double ExtractDoubleValue(const UnifiedVectorFormat &fmt, idx_t sel_idx, PhysicalType phys_type) {
     if (!fmt.validity.RowIsValid(sel_idx)) {
-        return 0.0;  // Null or invalid; caller checks validity separately
+        return 0.0;
     }
     
     auto data_ptr = (uint8_t *)fmt.data;
@@ -143,59 +142,6 @@ void RMIModule::RegisterIndex(DatabaseInstance &db) {
 
 const case_insensitive_set_t RMIIndex::MODEL_MAP = { "linear", "poly", "two_layer" };
 
-// PhysicalOperator &RMIIndex::CreatePlan(PlanIndexInput &input) {
-// 	throw NotImplementedException("RMIIndex::CreatePlan will be implemented in rmi_index_plan.cpp");
-// }
-
-//==============================================================================
-// Construct (initial build / training)
-//==============================================================================
-
-// void RMIIndex::Construct(DataChunk &input, Vector &row_ids, idx_t thread_idx) {
-//     lock_guard<mutex> guard(rmi_lock);
-
-//     idx_t n = input.size();
-//     training_data.reserve(training_data.size() + n);
-
-//     UnifiedVectorFormat key_data;
-//     input.data[0].ToUnifiedFormat(n, key_data);
-
-//     auto rowid_ptr = (row_t *)row_ids.GetData();
-
-//     for (idx_t i = 0; i < n; i++) {
-//         idx_t sel = key_data.sel->get_index(i);
-//         if (!key_data.validity.RowIsValid(sel))
-//             continue;
-
-//         // Extract the numeric value and convert to double
-//         double key = ExtractDoubleValue(key_data, sel, types[0]);
-//         row_t rid = rowid_ptr[i];
-
-//         training_data.emplace_back(key, rid);
-//     }
-//     total_rows += n;
-// }
-
-
-// Compact() – retrain the model + rebuild error bounds
-// Uncommet if needed later
-
-// void RMIIndex::Compact() {
-//     lock_guard<mutex> guard(rmi_lock);
-
-//     if (training_data.empty())
-//         return;
-
-//     // Sort training data by key
-//     std::sort(training_data.begin(), training_data.end(),
-//               [](auto &a, auto &b) { return a.first < b.first; });
-
-//     total_rows = training_data.size();
-
-//     model->Train(training_data);
-//     is_dirty = true;
-// }
-
 std::unique_ptr<RMIIndexStats> RMIIndex::GetStats() {
     auto stats = std::make_unique<RMIIndexStats>();
 
@@ -212,7 +158,7 @@ std::unique_ptr<RMIIndexStats> RMIIndex::GetStats() {
 bool RMIIndex::TryMatchLookupExpression(
     const std::unique_ptr<Expression> &expr,
     std::vector<std::reference_wrapper<Expression>> &bindings) const {
-    return false; // not implemented yet
+    return false;
 }
 
 unique_ptr<ExpressionMatcher> RMIIndex::MakeFunctionMatcher() const {
@@ -280,10 +226,10 @@ void RMIIndex::CommitDrop(IndexLock &) {
 }
 
 void RMIIndex::Build(const std::vector<std::pair<double, row_t>> &sorted_data) {
-    // 1. Prepare the Sorted Struct Array
+    // Prepare the Sorted Struct Array
     index_data.clear();
     index_data.reserve(sorted_data.size());
-    total_rows = sorted_data.size(); // Track size of the static part
+    total_rows = sorted_data.size();
 
     RMILog("Building RMI Index with " + std::to_string(total_rows) + " entries.\n");
 
@@ -310,7 +256,7 @@ void RMIIndex::Build(const std::vector<std::pair<double, row_t>> &sorted_data) {
     // Ensure strict sorting (vital for binary search or range scans)
     std::sort(index_data.begin(), index_data.end());
 
-    // 2. Train the Model on the Sorted Array
+    // Train the Model on the Sorted Array
     std::vector<std::pair<double, idx_t>> training_data;
     training_data.reserve(index_data.size());
 
@@ -319,26 +265,7 @@ void RMIIndex::Build(const std::vector<std::pair<double, row_t>> &sorted_data) {
         training_data.emplace_back(index_data[i].key, (idx_t)i);
     }
 
-    i = 0;
-    RMILog("Printing the Training_data:\n");
-    for (auto it = training_data.begin(); it != training_data.end(); it++) {
-        RMILog("\t{ " + std::to_string(it->first) + ", " + std::to_string(it->second) + "}");
-        i++;
-        if (i > 100) {
-            break;
-        }
-    }
-    RMILog("End of Training_data\n");
-
     model->Train(training_data);
-
-    // RMILog("Printing the index_data after sort:\n");
-    // for (auto it = index_data.begin(); it != index_data.end(); it++) {
-    //     RMILog("{ " + std::to_string(it->key) + ", " + std::to_string(it->row_id) + "}\n");
-    // }
-    // RMILog("End of index_data after sort\n");
-
-
 }
 
 void RMIIndex::Vacuum(IndexLock &) {}
@@ -369,7 +296,6 @@ static unique_ptr<IndexScanState> InitializeScanTwoPredicates(const Value &low_v
 
 unique_ptr<IndexScanState> RMIIndex::TryInitializeScan(const Expression &expr, const Expression &filter_expr) {
 	
-    // --- Column Match Check ---
     // Only scan when the filter references the indexed column
     if (!expr.Equals(*unbound_expressions[0])) {
         return nullptr;
@@ -391,12 +317,8 @@ unique_ptr<IndexScanState> RMIIndex::TryInitializeScan(const Expression &expr, c
 
 	vector<reference<Expression>> bindings;
 	auto filter_match =
-	    matcher.Match(const_cast<Expression &>(filter_expr), bindings); // NOLINT: Match does not alter the expr.
+	    matcher.Match(const_cast<Expression &>(filter_expr), bindings);
 	if (filter_match) {
-		// This is a range or equality comparison with a constant value, so we can use the index.
-		// 		bindings[0] = the expression
-		// 		bindings[1] = the index expression
-		// 		bindings[2] = the constant
 		auto &comparison = bindings[0].get().Cast<BoundComparisonExpression>();
 		auto constant_value = bindings[2].get().Cast<BoundConstantExpression>().value;
 		auto comparison_type = comparison.GetExpressionType();
@@ -440,9 +362,7 @@ unique_ptr<IndexScanState> RMIIndex::TryInitializeScan(const Expression &expr, c
 		high_comparison_type =
 		    between.upper_inclusive ? ExpressionType::COMPARE_LESSTHANOREQUALTO : ExpressionType::COMPARE_LESSTHAN;
 	}
-	// FIXME: add another if...else... to match rewritten BETWEEN,
-	// i.e., WHERE i BETWEEN 50 AND 1502 is rewritten to CONJUNCTION_AND.
-
+	
 	// We cannot use an index scan.
 	if (equal_value.IsNull() && low_value.IsNull() && high_value.IsNull()) {
 		return nullptr;
@@ -504,9 +424,9 @@ bool RMIIndex::Scan(IndexScanState &state,
     return SearchCloseRange(key_low, key_high, left_eq, right_eq, max_count, result_ids);
 }
 
-//==============================================================================
+
 // Core Search Routines (adapted to BaseRMIModel)
-//==============================================================================
+
 bool RMIIndex::SearchEqual(double key, idx_t max_count, std::set<row_t> &out) {
     // 1. Search Main Index (Binary Search / RMI Model)
     // We still use Epsilon here for the main sorted data
@@ -569,12 +489,6 @@ bool RMIIndex::SearchGreater(double key, bool equal, idx_t max_count, std::set<r
             }
         }
     }
-
-    // RMILog("Printing the SearchGreater Results:\n");
-    // for (std::set<row_t>::iterator it = out.begin(); it != out.end(); it++) {
-    //     RMILog(std::to_string(*it) + "\n");
-    // }
-    // RMILog("End of SearchGreater Result\n");
 
     return true;
 }
@@ -641,10 +555,7 @@ bool RMIIndex::SearchCloseRange(double low,
     return true;
 }
 
-//==============================================================================
-// Persistence (optional)
-//==============================================================================
-
+// Persistence
 IndexStorageInfo RMIIndex::SerializeToDisk(QueryContext ctx,
                                            const case_insensitive_map_t<Value> &opts) {
     throw NotImplementedException("RMI persistence not implemented yet");

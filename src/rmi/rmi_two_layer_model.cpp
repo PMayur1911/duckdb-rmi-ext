@@ -10,18 +10,12 @@ RMITwoLayerModel::RMITwoLayerModel()
     model_name = "RMITwoLayerModel";
 }
 
-// ------------------------------------------------------------------
-// Utility clamp
-// ------------------------------------------------------------------
 static inline idx_t ClampIndex(long double x, idx_t total_rows) {
     if (x < 0) return 0;
     if ((idx_t)x >= total_rows) return total_rows - 1;
     return (idx_t)x;
 }
 
-// ------------------------------------------------------------------
-// Stage 1: Train root linear regression
-// ------------------------------------------------------------------
 void RMITwoLayerModel::TrainRootModel(const std::vector<std::pair<double,idx_t>> &data) {
     const idx_t n = data.size();
     if (n == 0) {
@@ -56,19 +50,12 @@ void RMITwoLayerModel::TrainRootModel(const std::vector<std::pair<double,idx_t>>
     }
 }
 
-
-// ------------------------------------------------------------------
-// Predict segment id
-// ------------------------------------------------------------------
 idx_t RMITwoLayerModel::PredictSegment(double key) const {
     long double seg = root_slope * key + root_intercept;
     if (seg < 0) return 0;
     return (idx_t)std::min((long double)(K - 1), seg);
 }
 
-// ------------------------------------------------------------------
-// Stage 2: Build leaf models on contiguous partitions
-// ------------------------------------------------------------------
 void RMITwoLayerModel::BuildSegments(const std::vector<std::pair<double, idx_t>> &data) {
     const idx_t n = data.size();
     if (n == 0) {
@@ -95,17 +82,12 @@ void RMITwoLayerModel::BuildSegments(const std::vector<std::pair<double, idx_t>>
 
         idx_t count = end - start;
 
-        // --- Edge case: 1 point or 0 points in segment ---
         if (count < 2) {
             leaf_slopes[seg] = 0.0;
             leaf_intercepts[seg] = (double)start;
             start = end;
             continue;
         }
-
-        // ---------------------------------------------
-        // NUMERICALLY STABLE MEAN-CENTERED REGRESSION
-        // ---------------------------------------------
 
         long double sum_x = 0.0, sum_y = 0.0;
 
@@ -127,7 +109,6 @@ void RMITwoLayerModel::BuildSegments(const std::vector<std::pair<double, idx_t>>
             Sxy += xc * yc;
         }
 
-        // If Sxx is almost zero → vertical collapse → constant model
         if (fabsl(Sxx) < 1e-18) {
             leaf_slopes[seg] = 0.0;
             leaf_intercepts[seg] = (double)mean_y;
@@ -145,18 +126,12 @@ void RMITwoLayerModel::BuildSegments(const std::vector<std::pair<double, idx_t>>
     segment_bounds[K] = n;
 }
 
-
-// ------------------------------------------------------------------
-// Predict using leaf model
-// ------------------------------------------------------------------
 idx_t RMITwoLayerModel::PredictLeaf(idx_t seg, double key) const {
     long double pos = leaf_slopes[seg] * key + leaf_intercepts[seg];
     return (idx_t)pos;
 }
 
-// ------------------------------------------------------------------
 // Train full RMI (root + leaves + global error bounds)
-// ------------------------------------------------------------------
 void RMITwoLayerModel::Train(const std::vector<std::pair<double,idx_t>> &data) {
     const idx_t n = data.size();
     if (n == 0) {
@@ -198,18 +173,13 @@ void RMITwoLayerModel::Train(const std::vector<std::pair<double,idx_t>> &data) {
     }
 }
 
-// ------------------------------------------------------------------
-// Predict approximate position
-// ------------------------------------------------------------------
 idx_t RMITwoLayerModel::Predict(double key) const {
     if (K == 0) return 0;
     idx_t seg = PredictSegment(key);
     return PredictLeaf(seg, key);
 }
 
-// ------------------------------------------------------------------
 // Return [low, high] search window
-// ------------------------------------------------------------------
 pair<idx_t,idx_t> RMITwoLayerModel::GetSearchBounds(double key,
                                                     idx_t total_rows) const {
     idx_t pred = Predict(key);
@@ -223,9 +193,7 @@ pair<idx_t,idx_t> RMITwoLayerModel::GetSearchBounds(double key,
     return {(idx_t)lo, (idx_t)hi};
 }
 
-// ------------------------------------------------------------------
 // Overflow
-// ------------------------------------------------------------------
 void RMITwoLayerModel::InsertIntoOverflow(double key, row_t row_id) {
     overflow_index[key].push_back(row_id);
 }
