@@ -17,7 +17,7 @@ fi
 # BENCHMARK FUNCTION — RMI (poly model)
 # =====================================================================
 run_benchmark() {
-    local NAME="$1"             # linear | poly | random
+    local NAME="$1"             
     local INSERT_SQL="$2"
     local QUERY_VALUES="$3"
     local OUT_DIR="$4"
@@ -46,7 +46,6 @@ run_benchmark() {
     BASE_SQL=$(cat <<EOF
 CREATE TABLE test_rmi_data(id DOUBLE, value DOUBLE);
 $INSERT_BLOCK
--- NO INDEX
 EOF
 )
 
@@ -60,24 +59,21 @@ EOF
 )
 
     # ---- BASE MEMORY ----
-    $TIME_BIN -v $DUCKDB mem_base.db <<< "$BASE_SQL" \
+    $TIME_BIN -v $DUCKDB mem_base_100k.db <<< "$BASE_SQL" \
         > /dev/null 2> base_mem.txt || true
 
-    MEM_BASE=$(grep -Ei "maximum resident set size|resident set size" base_mem.txt \
-                | grep -Eo "[0-9]+" | head -n 1)
+    MEM_BASE=$(grep -Ei "resident set size" base_mem.txt | grep -Eo "[0-9]+" | head -n 1)
     [[ -z "${MEM_BASE:-}" ]] && MEM_BASE=0
 
     # ---- INDEXED MEMORY ----
-    $TIME_BIN -v $DUCKDB mem_index.db <<< "$INDEX_SQL" \
+    $TIME_BIN -v $DUCKDB mem_index_100k.db <<< "$INDEX_SQL" \
         > /dev/null 2> index_mem.txt || true
 
-    MEM_FULL=$(grep -Ei "maximum resident set size|resident set size" index_mem.txt \
-                | grep -Eo "[0-9]+" | head -n 1)
+    MEM_FULL=$(grep -Ei "resident set size" index_mem.txt | grep -Eo "[0-9]+" | head -n 1)
     [[ -z "${MEM_FULL:-}" ]] && MEM_FULL=0
 
-    INDEX_MEM_KB=$(( MEM_FULL - MEM_BASE ))
+    INDEX_MEM_KB=$((MEM_FULL - MEM_BASE))
     (( INDEX_MEM_KB < 0 )) && INDEX_MEM_KB=0
-
     INDEX_MEM_MB=$(awk -v kb="$INDEX_MEM_KB" 'BEGIN { printf "%.2f", kb/1024 }')
 
     echo "Baseline Memory (KB): $MEM_BASE"
@@ -85,10 +81,13 @@ EOF
     echo "Index Memory (KB): $INDEX_MEM_KB"
     echo "Index Memory (MB): $INDEX_MEM_MB"
 
-    echo "Index Memory (KB): $INDEX_MEM_KB" > "$MEM_FILE"
-    echo "Index Memory (MB): $INDEX_MEM_MB" >> "$MEM_FILE"
+    {
+        echo "Index Memory (KB): $INDEX_MEM_KB"
+        echo "Index Memory (MB): $INDEX_MEM_MB"
+    } > "$MEM_FILE"
 
-    rm -f mem_base.db mem_index.db base_mem.txt index_mem.txt
+    rm -f mem_base_100k.db mem_index_100k.db base_mem.txt index_mem.txt
+
 
     # =====================================================================
     # STEP 2 — RUN 100 QUERIES (SAFE, STDIN)
@@ -101,7 +100,7 @@ EOF
 
     while read -r target; do
 
-        cat > tmp_query.sql <<EOF
+cat > tmp_query.sql <<EOF
 CREATE TEMP TABLE test_rmi_data(id DOUBLE, value DOUBLE);
 $INSERT_BLOCK
 
@@ -117,13 +116,13 @@ EOF
 
         start=$(date +%s%N)
 
+        # Safe execution
         if ! output=$($DUCKDB :memory: < tmp_query.sql 2>&1); then
             echo "[WARN] Query $idx failed — marking miss"
             misses=$((misses + 1))
-            runtime_ms=0
+            echo "0" >> "$RESULTS_FILE"
             echo "$output" > "$OUT_DIR/query_outputs/error_${idx}.txt"
-            echo "$runtime_ms" >> "$RESULTS_FILE"
-            idx=$((idx+1))
+            idx=$((idx + 1))
             continue
         fi
 
@@ -139,71 +138,74 @@ EOF
             hits=$((hits + 1))
         fi
 
-        echo "Query $idx -> $runtime_ms ms"
+        echo "Query $idx → $runtime_ms ms"
         idx=$((idx + 1))
 
     done < "$QUERY_VALUES"
 
     rm -f tmp_query.sql
 
+
     # =====================================================================
     # STEP 3 — STATS
     # =====================================================================
     echo "[*] Computing statistics..."
 
-    awk '
-    {
-        sum += $1
-        count += 1
-        if (NR == 1 || $1 < min) min = $1
-        if (NR == 1 || $1 > max) max = $1
-    }
-    END {
-        avg = sum / count
-        printf("Average (ms): %f\nMin (ms): %f\nMax (ms): %f\n", avg, min, max)
-    }' "$RESULTS_FILE" > "$STATS_FILE"
+    avg=$(awk '{s+=$1} END{printf "%.4f", s/NR}' "$RESULTS_FILE")
+    min=$(sort -n "$RESULTS_FILE" | head -n 1)
+    max=$(sort -n "$RESULTS_FILE" | tail -n 1)
 
     total=$(wc -l < "$RESULTS_FILE")
     p99_index=$(( (total * 99 + 99) / 100 ))
     p99=$(sort -n "$RESULTS_FILE" | sed -n "${p99_index}p")
-    echo "P99 (ms): $p99" >> "$STATS_FILE"
 
-    echo "Index Memory (KB): $INDEX_MEM_KB" >> "$STATS_FILE"
-    echo "Index Memory (MB): $INDEX_MEM_MB" >> "$STATS_FILE"
+    {
+        echo "Average (ms): $avg"
+        echo "Min (ms): $min"
+        echo "Max (ms): $max"
+        echo "P99 (ms): $p99"
+        echo "Index Memory (KB): $INDEX_MEM_KB"
+        echo "Index Memory (MB): $INDEX_MEM_MB"
+    } > "$STATS_FILE"
+
 
     # =====================================================================
-    # STEP 4 — ACCURACY
+    # STEP 4 — ACCURACY METRICS
     # =====================================================================
-    hit_rate=$(awk -v h="$hits" 'BEGIN { printf "%.2f", (h/100)*100 }')
-    miss_rate=$(awk -v m="$misses" 'BEGIN { printf "%.2f", (m/100)*100 }')
+    hit_rate=$(awk -v h="$hits" 'BEGIN { printf "%.2f", h }')
+    miss_rate=$(awk -v m="$misses" 'BEGIN { printf "%.2f", m }')
 
-    echo "Hits: $hits" > "$ACC_FILE"
-    echo "Misses: $misses" >> "$ACC_FILE"
-    echo "Hit Rate (%): $hit_rate" >> "$ACC_FILE"
-    echo "Miss Rate (%): $miss_rate" >> "$ACC_FILE"
+    {
+        echo "Hits: $hits"
+        echo "Misses: $misses"
+        echo "Hit Rate (% queries returning rows): $hit_rate"
+        echo "Miss Rate (% queries with 0 rows): $miss_rate"
+    } > "$ACC_FILE"
 
     echo "[*] Completed RMI-poly benchmark for $NAME"
 }
 
+
 # =====================================================================
-# RUN ALL THREE DISTRIBUTIONS
+# RUN ALL THREE 100K DISTRIBUTIONS
 # =====================================================================
-run_benchmark \
-    "linear" \
-    "../insert/insert_data_linear.sql" \
-    "../query/query_values_linear.txt" \
-    "../outputs/rmi_poly/linear"
 
 run_benchmark \
-    "poly" \
-    "../insert/insert_data_poly.sql" \
-    "../query/query_values_poly.txt" \
-    "../outputs/rmi_poly/poly"
+    "linear_100k" \
+    "../insert/insert_data_linear_100k.sql" \
+    "../query/query_values_linear_100k.txt" \
+    "../outputs_100k/rmi_poly/linear"
 
 run_benchmark \
-    "random" \
-    "../insert/insert_data_random.sql" \
-    "../query/query_values_random.txt" \
-    "../outputs/rmi_poly/random"
+    "poly_100k" \
+    "../insert/insert_data_poly_100k.sql" \
+    "../query/query_values_poly_100k.txt" \
+    "../outputs_100k/rmi_poly/poly"
 
-echo "[*] ALL RMI-poly benchmarks completed."
+run_benchmark \
+    "random_100k" \
+    "../insert/insert_data_random_100k.sql" \
+    "../query/query_values_random_100k.txt" \
+    "../outputs_100k/rmi_poly/random"
+
+echo "[*] ALL RMI-poly (100k) benchmarks completed."

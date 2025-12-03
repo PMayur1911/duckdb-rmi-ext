@@ -88,7 +88,7 @@ public:
 
 public:
     // Build
-    void Build(Vector &sorted_keys, Vector &sorted_row_ids, idx_t row_count);
+    void Build(const std::vector<std::pair<double, row_t>> &sorted_data);
 
     // Construction
     // void Construct(DataChunk &input, Vector &row_ids, idx_t thread_idx);
