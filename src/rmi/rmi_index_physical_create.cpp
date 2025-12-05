@@ -252,6 +252,9 @@ SinkFinalizeType PhysicalCreateRMIIndex::Finalize(
         }
     }
 
+    // Sort + train
+    std::sort(all_data.begin(), all_data.end(), [](auto &a, auto &b) { return a.first < b.first; });
+
     gstate.global_index->training_data = all_data;
     gstate.global_index->total_rows = all_data.size();
 

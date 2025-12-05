@@ -231,8 +231,6 @@ void RMIIndex::Build(const std::vector<std::pair<double, row_t>> &sorted_data) {
     index_data.reserve(sorted_data.size());
     total_rows = sorted_data.size();
 
-    RMILog("Building RMI Index with " + std::to_string(total_rows) + " entries.\n");
-
     // Copy data into our struct vector (input is already sorted by key)
     for (auto &kv : sorted_data) {
         RMIEntry entry;
@@ -241,20 +239,8 @@ void RMIIndex::Build(const std::vector<std::pair<double, row_t>> &sorted_data) {
         index_data.push_back(entry);
     }
 
-    int i = 0;
-    RMILog("Printing the index_data before sort:\n");
-    for (auto it = index_data.begin(); it != index_data.end(); it++) {
-        RMILog("\t{ " + std::to_string(it->key) + ", " + std::to_string(it->row_id) + "}");
-        i++;
-        if (i > 100) {
-            break;
-        }
-    }
-    RMILog("End of index_data before sort\n");
-
-
-    // Ensure strict sorting (vital for binary search or range scans)
-    std::sort(index_data.begin(), index_data.end());
+    // // Ensure strict sorting (vital for binary search or range scans)
+    // std::sort(index_data.begin(), index_data.end());
 
     // Train the Model on the Sorted Array
     std::vector<std::pair<double, idx_t>> training_data;
@@ -391,7 +377,11 @@ bool RMIIndex::Scan(IndexScanState &state,
                     std::set<row_t> &result_ids) {
     auto &s = state.Cast<RMIIndexScanState>();
 
-    double key_low = s.values[0].GetValue<double>();
+    Value val_low = s.values[0].DefaultCastAs(LogicalType(LogicalTypeId::DOUBLE));
+    double key_low = val_low.GetValue<double>();
+
+    // RMILog("RMIIndex::Scan called with predicates: ");
+    // RMILog("  Low Value: " + std::to_string(key_low));
 
     // Single predicate?
     if (s.values[1].IsNull()) {
@@ -413,10 +403,11 @@ bool RMIIndex::Scan(IndexScanState &state,
         }
     }
 
+    Value val_high = s.values[1].DefaultCastAs(LogicalType(LogicalTypeId::DOUBLE));
+    double key_high = val_high.GetValue<double>();
+
     // Two-sided (BETWEEN)
     lock_guard<mutex> guard(rmi_lock);
-
-    double key_high = s.values[1].GetValue<double>();
 
     bool left_eq = (s.expressions[0] == ExpressionType::COMPARE_GREATERTHANOREQUALTO);
     bool right_eq = (s.expressions[1] == ExpressionType::COMPARE_LESSTHANOREQUALTO);
@@ -495,8 +486,11 @@ bool RMIIndex::SearchGreater(double key, bool equal, idx_t max_count, std::set<r
 
 bool RMIIndex::SearchLess(double key, bool equal, idx_t max_count, std::set<row_t> &out) {
     idx_t end = std::min<int64_t>(index_data.size(), (idx_t)(model->PredictPosition(key) + model->GetMaxError()));
-
-    for (idx_t i = 0; i < end; i++) {
+    if (end == index_data.size()) {
+        end = index_data.size() - 1;
+    }
+    
+    for (idx_t i = 0; i <= end; i++) {
         double k = index_data[i].key;
         bool ok = equal ? (k <= key) : (k < key);
         if (ok) {
