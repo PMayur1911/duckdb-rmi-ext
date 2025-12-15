@@ -1,0 +1,14 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    working_dir: /workspace
+    volumes:
+      - ./:/workspace          # Your extension code
+      - duckdb-ccache:/ccache  # Shared ccache for fast rebuilds
+    stdin_open: true
+    tty: true
+
+volumes:
+  duckdb-ccache:
